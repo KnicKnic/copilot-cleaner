@@ -28,7 +28,7 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 - Each session row has a checkbox for cleanup selection.
 - Pressing Space in the session grid toggles the focused row or all selected rows.
 - A select-all-visible checkbox toggles all currently loaded session rows.
-- Columns are sortable.
+- Session State columns are sortable, with active precedence and direction shown in the column header.
 - Columns can be reordered by drag and drop.
 - Columns can be resized from fixed starting widths with smaller minimum widths.
 - Multi-column sorting is applied using visible left-to-right column order.
@@ -51,6 +51,7 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 
 - Loads SDK-visible sessions using `GitHub.Copilot.SDK` and `CopilotClient.ListSessionsAsync`.
 - Displays SDK metadata including session ID, start time, modified time, summary, remote status, working directory, git root, repository, and branch.
+- Sorts SDK session columns with the same multi-column, visible-left-to-right precedence used by the Session State grid.
 - Shows whether each SDK-visible session has a matching local `session-state` folder.
 - Selects SDK sessions that no longer have a matching `session-state` folder.
 - Deletes selected SDK sessions through `CopilotClient.DeleteSessionAsync` after confirmation.

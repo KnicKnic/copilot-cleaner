@@ -21,7 +21,7 @@ and moves selected session folders to:
 - Shows `Has copilotshell.json`, `workspace.cwd`, `Last modified`, `In Copilot SDK list`, `workspace.git_root`, `workspace.branch`, `workspace.summary`, and `metadata.origin` as first-class main-grid columns.
 - Shows all flattened metadata values and a lazily loaded recursive file list for the selected session folder.
 - Loads and displays SDK-visible Copilot sessions in a separate tab using `GitHub.Copilot.SDK`.
-- Sorts columns with multi-column sorting applied in visible left-to-right column order.
+- Sorts Session State and Copilot SDK columns with multi-column sorting applied in visible left-to-right column order and active precedence/direction shown in grid headers.
 - Allows column drag-and-drop reordering.
 - Aggregates rows by one or more visible columns, with nested group-level checkboxes for bulk selection.
 - Moves selected session folders to a configurable target directory.

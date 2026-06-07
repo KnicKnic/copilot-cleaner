@@ -1,9 +1,11 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -20,9 +22,14 @@ public partial class MainWindow : Window
     private readonly CopilotSdkSessionService copilotSdkSessionService = new();
     private readonly SessionFileOperations fileOperations = new();
     private readonly Dictionary<string, ListSortDirection> activeSorts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, ListSortDirection> activeCopilotSdkSorts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Button> sessionColumnHeaders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, Button> copilotSdkColumnHeaders = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> copilotSdkColumnLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<SessionRow> sessions = [];
     private readonly ObservableCollection<SessionGridEntry> sessionView = [];
-    private readonly ObservableCollection<CopilotSdkSessionRow> copilotSdkSessions = [];
+    private readonly List<CopilotSdkSessionRow> copilotSdkSessionRows = [];
+    private readonly ObservableCollection<CopilotSdkSessionRow> copilotSdkSessionView = [];
     private readonly ObservableCollection<string> aggregateColumns = [];
     private readonly ObservableCollection<string> activeAggregateColumns = [];
     private CancellationTokenSource? scanCancellation;
@@ -31,11 +38,12 @@ public partial class MainWindow : Window
 
     public ObservableCollection<SessionGridEntry> SessionView => sessionView;
 
-    public ObservableCollection<CopilotSdkSessionRow> CopilotSdkSessions => copilotSdkSessions;
+    public ObservableCollection<CopilotSdkSessionRow> CopilotSdkSessions => copilotSdkSessionView;
 
     public MainWindow()
     {
         InitializeComponent();
+        BindNamedControls();
         DataContext = this;
 
         SourcePathTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".copilot", "session-state");
@@ -45,12 +53,42 @@ public partial class MainWindow : Window
         ActiveAggregateListBox.ItemsSource = activeAggregateColumns;
 
         RebuildColumns();
+        ConfigureCopilotSdkSorting();
         _ = ScanAsync();
     }
 
     private void InitializeComponent()
     {
         AvaloniaXamlLoader.Load(this);
+    }
+
+    private void BindNamedControls()
+    {
+        SourcePathTextBox = GetRequiredControl<TextBox>(nameof(SourcePathTextBox));
+        DestinationPathTextBox = GetRequiredControl<TextBox>(nameof(DestinationPathTextBox));
+        CopilotHomePathTextBox = GetRequiredControl<TextBox>(nameof(CopilotHomePathTextBox));
+        ScanButton = GetRequiredControl<Button>(nameof(ScanButton));
+        LoadCopilotSdkSessionsButton = GetRequiredControl<Button>(nameof(LoadCopilotSdkSessionsButton));
+        DeleteSelectedCopilotSdkSessionsButton = GetRequiredControl<Button>(nameof(DeleteSelectedCopilotSdkSessionsButton));
+        ScanProgressBar = GetRequiredControl<ProgressBar>(nameof(ScanProgressBar));
+        CopilotSdkProgressBar = GetRequiredControl<ProgressBar>(nameof(CopilotSdkProgressBar));
+        SelectAllCheckBox = GetRequiredControl<CheckBox>(nameof(SelectAllCheckBox));
+        AggregateColumnComboBox = GetRequiredControl<ComboBox>(nameof(AggregateColumnComboBox));
+        ActiveAggregateListBox = GetRequiredControl<ListBox>(nameof(ActiveAggregateListBox));
+        SessionsGrid = GetRequiredControl<DataGrid>(nameof(SessionsGrid));
+        FileListGrid = GetRequiredControl<DataGrid>(nameof(FileListGrid));
+        MetadataGrid = GetRequiredControl<DataGrid>(nameof(MetadataGrid));
+        CopilotSdkSessionsGrid = GetRequiredControl<DataGrid>(nameof(CopilotSdkSessionsGrid));
+        SummaryTextBlock = GetRequiredControl<TextBlock>(nameof(SummaryTextBlock));
+        FileListSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(FileListSummaryTextBlock));
+        MetadataSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(MetadataSummaryTextBlock));
+        CopilotSdkSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(CopilotSdkSummaryTextBlock));
+        StatusTextBlock = GetRequiredControl<TextBlock>(nameof(StatusTextBlock));
+    }
+
+    private T GetRequiredControl<T>(string name) where T : Control
+    {
+        return this.FindControl<T>(name) ?? throw new InvalidOperationException($"Control '{name}' was not found.");
     }
 
     private async void Scan_Click(object? sender, RoutedEventArgs e)
@@ -65,7 +103,7 @@ public partial class MainWindow : Window
 
     private void SelectSdkSessionsWithoutState_Click(object? sender, RoutedEventArgs e)
     {
-        foreach (var session in copilotSdkSessions)
+        foreach (var session in copilotSdkSessionRows)
         {
             session.IsSelected = !session.HasSessionState;
         }
@@ -75,7 +113,7 @@ public partial class MainWindow : Window
 
     private void ClearCopilotSdkSelection_Click(object? sender, RoutedEventArgs e)
     {
-        foreach (var session in copilotSdkSessions)
+        foreach (var session in copilotSdkSessionRows)
         {
             session.IsSelected = false;
         }
@@ -85,7 +123,7 @@ public partial class MainWindow : Window
 
     private async void DeleteSelectedCopilotSdkSessions_Click(object? sender, RoutedEventArgs e)
     {
-        var selected = copilotSdkSessions.Where(session => session.IsSelected).ToList();
+        var selected = copilotSdkSessionRows.Where(session => session.IsSelected).ToList();
         if (selected.Count == 0)
         {
             SetStatus("No Copilot SDK sessions selected.");
@@ -316,12 +354,19 @@ public partial class MainWindow : Window
 
     private void SessionsGrid_Sorting(object? sender, DataGridColumnEventArgs e)
     {
+        e.Handled = true;
+
         var key = e.Column.SortMemberPath;
         if (string.IsNullOrWhiteSpace(key))
         {
             return;
         }
 
+        ToggleSessionSort(key);
+    }
+
+    private void ToggleSessionSort(string key)
+    {
         var nextDirection = GetNextSortDirection(key);
         if (nextDirection is null)
         {
@@ -333,12 +378,20 @@ public partial class MainWindow : Window
         }
 
         RebuildSessionView();
+        ApplySessionSortHeaders();
         SetStatus(activeSorts.Count == 0 ? "Sorting cleared." : $"Sorted by {string.Join(", ", GetOrderedSorts().Select(sort => sort.Key))}.");
     }
 
     private void SessionsGrid_ColumnReordered(object? sender, DataGridColumnEventArgs e)
     {
         RebuildSessionView();
+        ApplySessionSortHeaders();
+    }
+
+    private void CopilotSdkSessionsGrid_ColumnReordered(object? sender, DataGridColumnEventArgs e)
+    {
+        ReorderCopilotSdkSessions();
+        ApplyCopilotSdkSortHeaders();
     }
 
     private async void SessionsGrid_SelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -437,13 +490,14 @@ public partial class MainWindow : Window
     private void AddCopilotSdkSession(CopilotSdkSessionRow session)
     {
         session.PropertyChanged += CopilotSdkSession_PropertyChanged;
-        copilotSdkSessions.Add(session);
+        copilotSdkSessionRows.Add(session);
     }
 
     private void RebuildColumns()
     {
         SessionsGrid.Columns.Clear();
         aggregateColumns.Clear();
+        sessionColumnHeaders.Clear();
 
         SessionsGrid.Columns.Add(new DataGridCheckBoxColumn
         {
@@ -459,9 +513,10 @@ public partial class MainWindow : Window
             aggregateColumns.Add(key);
             SessionsGrid.Columns.Add(new DataGridTextColumn
             {
-                Header = key,
+                Header = CreateSessionColumnHeader(key),
                 SortMemberPath = key,
-                Binding = new Binding($"[{key}]") { Mode = BindingMode.OneWay },
+                Binding = new Binding(".") { Mode = BindingMode.OneWay, Converter = new SessionGridEntryValueConverter(key) },
+                CanUserSort = false,
                 IsReadOnly = true,
                 MinWidth = GetMinimumColumnWidth(key),
                 Width = GetInitialColumnWidth(key)
@@ -515,12 +570,176 @@ public partial class MainWindow : Window
 
     private ListSortDirection? GetNextSortDirection(string key)
     {
-        if (!activeSorts.TryGetValue(key, out var current))
+        return GetNextSortDirection(activeSorts, key);
+    }
+
+    private static ListSortDirection? GetNextSortDirection(IReadOnlyDictionary<string, ListSortDirection> sorts, string key)
+    {
+        if (!sorts.TryGetValue(key, out var current))
         {
             return ListSortDirection.Ascending;
         }
 
         return current == ListSortDirection.Ascending ? ListSortDirection.Descending : null;
+    }
+
+    private void ConfigureCopilotSdkSorting()
+    {
+        copilotSdkColumnHeaders.Clear();
+        copilotSdkColumnLabels.Clear();
+
+        foreach (var column in CopilotSdkSessionsGrid.Columns)
+        {
+            var key = column.SortMemberPath;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            var label = column.Header?.ToString() ?? key;
+            copilotSdkColumnLabels[key] = label;
+            var header = CreateSortHeaderButton(label, () => ToggleCopilotSdkSort(key));
+            copilotSdkColumnHeaders[key] = header;
+            column.Header = header;
+            column.CanUserSort = false;
+        }
+
+        ApplyCopilotSdkSortHeaders();
+    }
+
+    private void ToggleCopilotSdkSort(string key)
+    {
+        var nextDirection = GetNextSortDirection(activeCopilotSdkSorts, key);
+        if (nextDirection is null)
+        {
+            activeCopilotSdkSorts.Remove(key);
+        }
+        else
+        {
+            activeCopilotSdkSorts[key] = nextDirection.Value;
+        }
+
+        RebuildCopilotSdkSessionView();
+        ApplyCopilotSdkSortHeaders();
+        SetStatus(activeCopilotSdkSorts.Count == 0 ? "Copilot SDK sorting cleared." : $"Copilot SDK sorted by {string.Join(", ", GetOrderedCopilotSdkSorts().Select(sort => copilotSdkColumnLabels.GetValueOrDefault(sort.Key, sort.Key)))}.");
+    }
+
+    private void ReorderCopilotSdkSessions()
+    {
+        if (activeCopilotSdkSorts.Count == 0)
+        {
+            return;
+        }
+
+        RebuildCopilotSdkSessionView();
+    }
+
+    private IReadOnlyList<(string Key, ListSortDirection Direction)> GetOrderedCopilotSdkSorts()
+    {
+        return CopilotSdkSessionsGrid.Columns
+            .Where(column => !string.IsNullOrWhiteSpace(column.SortMemberPath) && activeCopilotSdkSorts.ContainsKey(column.SortMemberPath))
+            .OrderBy(column => column.DisplayIndex)
+            .Select(column => (column.SortMemberPath!, activeCopilotSdkSorts[column.SortMemberPath!]))
+            .ToList();
+    }
+
+    private IReadOnlyList<CopilotSdkSessionRow> GetOrderedCopilotSdkRows()
+    {
+        var orderedSorts = GetOrderedCopilotSdkSorts();
+        if (orderedSorts.Count == 0)
+        {
+            return copilotSdkSessionRows.ToList();
+        }
+
+        var comparer = Comparer<CopilotSdkSessionRow>.Create((left, right) => CompareCopilotSdkRows(left, right, orderedSorts));
+        return copilotSdkSessionRows.OrderBy(row => row, comparer).ToList();
+    }
+
+    private static int CompareCopilotSdkRows(CopilotSdkSessionRow? left, CopilotSdkSessionRow? right, IReadOnlyList<(string Key, ListSortDirection Direction)> sorts)
+    {
+        if (ReferenceEquals(left, right))
+        {
+            return 0;
+        }
+
+        if (left is null)
+        {
+            return -1;
+        }
+
+        if (right is null)
+        {
+            return 1;
+        }
+
+        foreach (var sort in sorts)
+        {
+            var comparison = CompareValues(GetCopilotSdkSortValue(left, sort.Key), GetCopilotSdkSortValue(right, sort.Key));
+            if (comparison != 0)
+            {
+                return sort.Direction == ListSortDirection.Ascending ? comparison : -comparison;
+            }
+        }
+
+        return string.Compare(left.SessionId, right.SessionId, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private static object? GetCopilotSdkSortValue(CopilotSdkSessionRow row, string key)
+    {
+        return key switch
+        {
+            nameof(CopilotSdkSessionRow.HasSessionState) => row.HasSessionState,
+            nameof(CopilotSdkSessionRow.ModifiedTime) => row.ModifiedTime,
+            nameof(CopilotSdkSessionRow.WorkingDirectory) => row.WorkingDirectory,
+            nameof(CopilotSdkSessionRow.GitRoot) => row.GitRoot,
+            nameof(CopilotSdkSessionRow.Branch) => row.Branch,
+            nameof(CopilotSdkSessionRow.Summary) => row.Summary,
+            nameof(CopilotSdkSessionRow.IsRemote) => row.IsRemote,
+            nameof(CopilotSdkSessionRow.StartTime) => row.StartTime,
+            nameof(CopilotSdkSessionRow.SessionId) => row.SessionId,
+            nameof(CopilotSdkSessionRow.Repository) => row.Repository,
+            _ => null
+        };
+    }
+
+    private static int CompareValues(object? left, object? right)
+    {
+        if (left is null && right is null)
+        {
+            return 0;
+        }
+
+        if (left is null)
+        {
+            return -1;
+        }
+
+        if (right is null)
+        {
+            return 1;
+        }
+
+        if (left.GetType() == right.GetType() && left is IComparable comparable)
+        {
+            return comparable.CompareTo(right);
+        }
+
+        return string.Compare(left.ToString(), right.ToString(), StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    private void RebuildCopilotSdkSessionView()
+    {
+        var selectedSession = CopilotSdkSessionsGrid.SelectedItem as CopilotSdkSessionRow;
+        copilotSdkSessionView.Clear();
+
+        foreach (var row in GetOrderedCopilotSdkRows())
+        {
+            copilotSdkSessionView.Add(row);
+        }
+
+        CopilotSdkSessionsGrid.SelectedItem = selectedSession is null
+            ? null
+            : copilotSdkSessionView.FirstOrDefault(row => ReferenceEquals(row, selectedSession));
     }
 
     private IReadOnlyList<(string Key, ListSortDirection Direction)> GetOrderedSorts()
@@ -596,6 +815,75 @@ public partial class MainWindow : Window
 
     private void ClearGridSortGlyphs()
     {
+        ApplySessionSortHeaders();
+    }
+
+    private void ApplySessionSortHeaders()
+    {
+        var orderedSorts = GetOrderedSorts();
+        foreach (var header in sessionColumnHeaders)
+        {
+            header.Value.Content = activeSorts.TryGetValue(header.Key, out var direction)
+                ? $"{header.Key} ({GetSortOrdinal(orderedSorts, header.Key)} {GetSortLabel(direction)})"
+                : header.Key;
+        }
+    }
+
+    private void ApplyCopilotSdkSortHeaders()
+    {
+        var orderedSorts = GetOrderedCopilotSdkSorts();
+        foreach (var header in copilotSdkColumnHeaders)
+        {
+            var label = copilotSdkColumnLabels.GetValueOrDefault(header.Key, header.Key);
+            header.Value.Content = activeCopilotSdkSorts.TryGetValue(header.Key, out var direction)
+                ? $"{label} ({GetSortOrdinal(orderedSorts, header.Key)} {GetSortLabel(direction)})"
+                : label;
+        }
+    }
+
+    private static int GetSortOrdinal(IReadOnlyList<(string Key, ListSortDirection Direction)> orderedSorts, string key)
+    {
+        for (var index = 0; index < orderedSorts.Count; index++)
+        {
+            if (string.Equals(orderedSorts[index].Key, key, StringComparison.OrdinalIgnoreCase))
+            {
+                return index + 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private Button CreateSessionColumnHeader(string key)
+    {
+        var header = CreateSortHeaderButton(key, () => ToggleSessionSort(key));
+
+        sessionColumnHeaders[key] = header;
+        return header;
+    }
+
+    private static Button CreateSortHeaderButton(string text, Action sortAction)
+    {
+        var header = new Button
+        {
+            Content = text,
+            Padding = new Avalonia.Thickness(4, 0),
+            Margin = new Avalonia.Thickness(0),
+            MinWidth = 0,
+            FontSize = 12,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Left,
+            Background = Avalonia.Media.Brushes.Transparent,
+            BorderThickness = new Avalonia.Thickness(0)
+        };
+
+        header.Click += (_, _) => sortAction();
+        return header;
+    }
+
+    private static string GetSortLabel(ListSortDirection direction)
+    {
+        return direction == ListSortDirection.Ascending ? "asc" : "desc";
     }
 
     private async Task BrowseIntoAsync(TextBox textBox, string title)
@@ -689,7 +977,7 @@ public partial class MainWindow : Window
 
     private void UpdateCopilotSdkSummary()
     {
-        CopilotSdkSummaryTextBlock.Text = $"{copilotSdkSessions.Count} SDK sessions | {copilotSdkSessions.Count(session => session.IsSelected)} selected | {copilotSdkSessions.Count(session => !session.HasSessionState)} without session-state";
+        CopilotSdkSummaryTextBlock.Text = $"{copilotSdkSessionRows.Count} SDK sessions | {copilotSdkSessionRows.Count(session => session.IsSelected)} selected | {copilotSdkSessionRows.Count(session => !session.HasSessionState)} without session-state";
     }
 
     private async Task LoadCopilotSdkSessionsAsync()
@@ -698,12 +986,13 @@ public partial class MainWindow : Window
         copilotSdkCancellation = new CancellationTokenSource();
         var cancellationToken = copilotSdkCancellation.Token;
 
-        foreach (var session in copilotSdkSessions)
+        foreach (var session in copilotSdkSessionRows)
         {
             session.PropertyChanged -= CopilotSdkSession_PropertyChanged;
         }
 
-        copilotSdkSessions.Clear();
+        copilotSdkSessionRows.Clear();
+        copilotSdkSessionView.Clear();
         UpdateCopilotSdkSummary();
         CopilotSdkProgressBar.IsVisible = true;
         LoadCopilotSdkSessionsButton.IsEnabled = false;
@@ -722,6 +1011,7 @@ public partial class MainWindow : Window
                 AddCopilotSdkSession(session);
             }
 
+            RebuildCopilotSdkSessionView();
             UpdateCopilotSdkSummary();
             SetStatus($"Loaded {loaded.Count} Copilot SDK session(s).");
         }
@@ -886,5 +1176,18 @@ public partial class MainWindow : Window
     private void SetStatus(string message)
     {
         StatusTextBlock.Text = message;
+    }
+
+    private sealed class SessionGridEntryValueConverter(string key) : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            return value is SessionGridEntry entry ? entry[key] : string.Empty;
+        }
+
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            throw new NotSupportedException();
+        }
     }
 }

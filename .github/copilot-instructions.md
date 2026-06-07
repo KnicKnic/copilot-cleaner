@@ -1,6 +1,6 @@
 # Repository Instructions
 
-This project is a local C# WPF app for inspecting and cleaning GitHub Copilot session-state folders.
+This project is a local cross-platform C# Avalonia app for inspecting and cleaning GitHub Copilot session-state folders.
 
 ## Documentation Updates
 

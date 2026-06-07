@@ -40,7 +40,7 @@ The main window has three primary areas:
 - A selected-session details area with lazy file-list loading and full flattened metadata values.
 - A Copilot SDK Sessions tab with SDK home selection, SDK session loading, SDK metadata columns, missing-session-state selection, and SDK-backed deletion.
 
-Sorting is tracked per column and applied according to the visible left-to-right column order. Aggregation is represented by explicit group rows in the session grid, supports multiple ordered grouping levels, and supports group-level checkbox selection across nested groups.
+Session State and Copilot SDK sorting is tracked per column and applied according to the visible left-to-right column order. Aggregation is represented by explicit group rows in the session grid, supports multiple ordered grouping levels, and supports group-level checkbox selection across nested groups.
 
 ## Safety Boundaries
 
