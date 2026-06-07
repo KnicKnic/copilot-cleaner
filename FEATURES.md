@@ -65,6 +65,7 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 
 ## Current Limitations
 
+- The current UI is Windows-only because it uses WPF and targets `net8.0-windows`.
 - YAML parsing uses YamlDotNet for normal `workspace.yaml` files.
 - Malformed multi-line quoted workspace summaries are salvaged through end-of-file when no closing quote is present.
 - The app does not currently block move or delete actions for sessions that have `inuse.*.lock`; it surfaces the lock status for user judgment.

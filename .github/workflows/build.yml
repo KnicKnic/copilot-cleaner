@@ -1,0 +1,50 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    name: Windows build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore CopilotCleaner.csproj
+
+      - name: Build
+        run: dotnet build CopilotCleaner.csproj --configuration Release --no-restore
+
+      - name: Publish smoke artifact
+        run: >-
+          dotnet publish CopilotCleaner.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained false
+          --output artifacts/CopilotCleaner-win-x64
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CopilotCleaner-win-x64-framework-dependent
+          path: artifacts/CopilotCleaner-win-x64/

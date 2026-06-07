@@ -1,6 +1,6 @@
 # Architecture
 
-Copilot Cleaner is a local Windows desktop app built with C# and WPF. It inspects GitHub Copilot session-state folders on disk, lists SDK-visible Copilot sessions, and lets the user decide which session-state folders or SDK sessions to clean up.
+Copilot Cleaner is a local Windows desktop app built with C# and WPF. It inspects GitHub Copilot session-state folders on disk, lists SDK-visible Copilot sessions, and lets the user decide which session-state folders or SDK sessions to clean up. The current target framework is `net8.0-windows` because the UI depends on WPF and Windows Forms dialogs.
 
 ## Project Structure
 
@@ -45,3 +45,11 @@ Sorting is tracked per column and applied according to the visible left-to-right
 ## Safety Boundaries
 
 Delete operations ask for confirmation. Move operations create the destination folder when needed and avoid overwriting existing session folders by adding a numeric suffix. Sessions with `inuse.*.lock` files are surfaced in the grid so active sessions can be avoided. SDK session deletion also asks for confirmation and routes through `CopilotClient.DeleteSessionAsync` rather than direct database mutation.
+
+## Platform Portability
+
+The service and model layers are designed around .NET filesystem and parsing APIs and can be reused by a cross-platform UI. The current WPF window, WPF data binding, WPF grouping, and Windows Forms folder browser usage are Windows-only. A cross-platform version would keep `Models/` and most of `Services/`, replace `MainWindow.xaml` and `MainWindow.xaml.cs` with a UI built on Avalonia, .NET MAUI, or a local web frontend, and retarget the shared logic to a non-Windows target framework.
+
+## Automation
+
+GitHub Actions includes a Windows build workflow for pushes and pull requests to `main`. Release automation runs from `v*` tags or manual dispatch, publishes self-contained Windows x64 and Windows arm64 ZIP files, and creates a GitHub Release. Dependabot tracks NuGet and GitHub Actions updates weekly.
