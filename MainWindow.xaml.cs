@@ -1,15 +1,16 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Input;
+using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
+using Avalonia.Data;
+using Avalonia.Input;
+using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using CopilotCleaner.Models;
 using CopilotCleaner.Services;
-using Binding = System.Windows.Data.Binding;
-using MessageBox = System.Windows.MessageBox;
-using WinForms = System.Windows.Forms;
 
 namespace CopilotCleaner;
 
@@ -20,6 +21,7 @@ public partial class MainWindow : Window
     private readonly SessionFileOperations fileOperations = new();
     private readonly Dictionary<string, ListSortDirection> activeSorts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<SessionRow> sessions = [];
+    private readonly ObservableCollection<SessionGridEntry> sessionView = [];
     private readonly ObservableCollection<CopilotSdkSessionRow> copilotSdkSessions = [];
     private readonly ObservableCollection<string> aggregateColumns = [];
     private readonly ObservableCollection<string> activeAggregateColumns = [];
@@ -27,7 +29,7 @@ public partial class MainWindow : Window
     private CancellationTokenSource? fileListCancellation;
     private CancellationTokenSource? copilotSdkCancellation;
 
-    public ObservableCollection<SessionRow> Sessions => sessions;
+    public ObservableCollection<SessionGridEntry> SessionView => sessionView;
 
     public ObservableCollection<CopilotSdkSessionRow> CopilotSdkSessions => copilotSdkSessions;
 
@@ -46,17 +48,22 @@ public partial class MainWindow : Window
         _ = ScanAsync();
     }
 
-    private async void Scan_Click(object sender, RoutedEventArgs e)
+    private void InitializeComponent()
+    {
+        AvaloniaXamlLoader.Load(this);
+    }
+
+    private async void Scan_Click(object? sender, RoutedEventArgs e)
     {
         await ScanAsync();
     }
 
-    private async void LoadCopilotSdkSessions_Click(object sender, RoutedEventArgs e)
+    private async void LoadCopilotSdkSessions_Click(object? sender, RoutedEventArgs e)
     {
         await LoadCopilotSdkSessionsAsync();
     }
 
-    private void SelectSdkSessionsWithoutState_Click(object sender, RoutedEventArgs e)
+    private void SelectSdkSessionsWithoutState_Click(object? sender, RoutedEventArgs e)
     {
         foreach (var session in copilotSdkSessions)
         {
@@ -66,7 +73,7 @@ public partial class MainWindow : Window
         UpdateCopilotSdkSummary();
     }
 
-    private void ClearCopilotSdkSelection_Click(object sender, RoutedEventArgs e)
+    private void ClearCopilotSdkSelection_Click(object? sender, RoutedEventArgs e)
     {
         foreach (var session in copilotSdkSessions)
         {
@@ -76,7 +83,7 @@ public partial class MainWindow : Window
         UpdateCopilotSdkSummary();
     }
 
-    private async void DeleteSelectedCopilotSdkSessions_Click(object sender, RoutedEventArgs e)
+    private async void DeleteSelectedCopilotSdkSessions_Click(object? sender, RoutedEventArgs e)
     {
         var selected = copilotSdkSessions.Where(session => session.IsSelected).ToList();
         if (selected.Count == 0)
@@ -85,33 +92,30 @@ public partial class MainWindow : Window
             return;
         }
 
-        var result = MessageBox.Show(
-            $"Delete {selected.Count} selected Copilot session(s) using the Copilot SDK? This removes SDK-managed session data and does not move session-state folders.",
+        var confirmed = await ConfirmAsync(
             "Confirm Copilot SDK cleanup",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
+            $"Delete {selected.Count} selected Copilot session(s) using the Copilot SDK? This removes SDK-managed session data and does not move session-state folders.");
 
-        if (result != MessageBoxResult.Yes)
+        if (!confirmed)
         {
             return;
         }
 
         LoadCopilotSdkSessionsButton.IsEnabled = false;
         DeleteSelectedCopilotSdkSessionsButton.IsEnabled = false;
-        CopilotSdkProgressBar.Visibility = Visibility.Visible;
+        CopilotSdkProgressBar.IsVisible = true;
         SetStatus($"Deleting {selected.Count} Copilot SDK session(s)...");
 
         try
         {
             var errors = await copilotSdkSessionService.DeleteSessionsAsync(
-                CopilotHomePathTextBox.Text.Trim(),
+                GetText(CopilotHomePathTextBox),
                 selected.Select(session => session.SessionId).ToList(),
                 CancellationToken.None);
 
             if (errors.Count > 0)
             {
-                MessageBox.Show(string.Join(Environment.NewLine, errors), "Some Copilot SDK sessions could not be deleted", MessageBoxButton.OK, MessageBoxImage.Warning);
+                await ShowMessageAsync("Some Copilot SDK sessions could not be deleted", string.Join(Environment.NewLine, errors));
                 SetStatus($"Deleted {selected.Count - errors.Count} Copilot SDK session(s); {errors.Count} failed.");
             }
             else
@@ -124,33 +128,33 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            MessageBox.Show(exception.Message, "Copilot SDK cleanup failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await ShowMessageAsync("Copilot SDK cleanup failed", exception.Message);
             SetStatus("Copilot SDK cleanup failed.");
         }
         finally
         {
-            CopilotSdkProgressBar.Visibility = Visibility.Collapsed;
+            CopilotSdkProgressBar.IsVisible = false;
             LoadCopilotSdkSessionsButton.IsEnabled = true;
             DeleteSelectedCopilotSdkSessionsButton.IsEnabled = true;
         }
     }
 
-    private void BrowseSource_Click(object sender, RoutedEventArgs e)
+    private async void BrowseSource_Click(object? sender, RoutedEventArgs e)
     {
-        BrowseInto(SourcePathTextBox);
+        await BrowseIntoAsync(SourcePathTextBox, "Choose session-state folder");
     }
 
-    private void BrowseDestination_Click(object sender, RoutedEventArgs e)
+    private async void BrowseDestination_Click(object? sender, RoutedEventArgs e)
     {
-        BrowseInto(DestinationPathTextBox);
+        await BrowseIntoAsync(DestinationPathTextBox, "Choose move target folder");
     }
 
-    private void BrowseCopilotHome_Click(object sender, RoutedEventArgs e)
+    private async void BrowseCopilotHome_Click(object? sender, RoutedEventArgs e)
     {
-        BrowseInto(CopilotHomePathTextBox);
+        await BrowseIntoAsync(CopilotHomePathTextBox, "Choose Copilot home folder");
     }
 
-    private void MoveSelected_Click(object sender, RoutedEventArgs e)
+    private void MoveSelected_Click(object? sender, RoutedEventArgs e)
     {
         var selected = GetSelectedRows();
         if (selected.Count == 0)
@@ -159,12 +163,12 @@ public partial class MainWindow : Window
             return;
         }
 
-        var errors = fileOperations.Move(selected, DestinationPathTextBox.Text.Trim());
+        var errors = fileOperations.Move(selected, GetText(DestinationPathTextBox));
         RemoveCompletedRows(selected, errors);
-        ReportOperation("Moved", selected.Count - errors.Count, errors);
+        _ = ReportOperationAsync("Moved", selected.Count - errors.Count, errors);
     }
 
-    private void DeleteSelected_Click(object sender, RoutedEventArgs e)
+    private async void DeleteSelected_Click(object? sender, RoutedEventArgs e)
     {
         var selected = GetSelectedRows();
         if (selected.Count == 0)
@@ -173,24 +177,18 @@ public partial class MainWindow : Window
             return;
         }
 
-        var result = MessageBox.Show(
-            $"Delete {selected.Count} selected session folder(s)? This cannot be undone.",
-            "Confirm delete",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning,
-            MessageBoxResult.No);
-
-        if (result != MessageBoxResult.Yes)
+        var confirmed = await ConfirmAsync("Confirm delete", $"Delete {selected.Count} selected session folder(s)? This cannot be undone.");
+        if (!confirmed)
         {
             return;
         }
 
         var errors = fileOperations.Delete(selected);
         RemoveCompletedRows(selected, errors);
-        ReportOperation("Deleted", selected.Count - errors.Count, errors);
+        await ReportOperationAsync("Deleted", selected.Count - errors.Count, errors);
     }
 
-    private void Aggregate_Click(object sender, RoutedEventArgs e)
+    private void Aggregate_Click(object? sender, RoutedEventArgs e)
     {
         if (AggregateColumnComboBox.SelectedItem is not string key)
         {
@@ -206,7 +204,7 @@ public partial class MainWindow : Window
         ApplyAggregation();
     }
 
-    private void RemoveAggregate_Click(object sender, RoutedEventArgs e)
+    private void RemoveAggregate_Click(object? sender, RoutedEventArgs e)
     {
         if (ActiveAggregateListBox.SelectedItem is not string key)
         {
@@ -218,32 +216,25 @@ public partial class MainWindow : Window
         ApplyAggregation();
     }
 
-    private void MoveAggregateUp_Click(object sender, RoutedEventArgs e)
+    private void MoveAggregateUp_Click(object? sender, RoutedEventArgs e)
     {
         MoveSelectedAggregateLevel(-1);
     }
 
-    private void MoveAggregateDown_Click(object sender, RoutedEventArgs e)
+    private void MoveAggregateDown_Click(object? sender, RoutedEventArgs e)
     {
         MoveSelectedAggregateLevel(1);
     }
 
     private void ApplyAggregation()
     {
-        var view = CollectionViewSource.GetDefaultView(sessions);
-        view.GroupDescriptions.Clear();
-        foreach (var key in activeAggregateColumns)
-        {
-            view.GroupDescriptions.Add(new SessionValueGroupDescription(key));
-        }
-
-        view.Refresh();
+        RebuildSessionView();
         SetStatus(activeAggregateColumns.Count == 0
             ? "Aggregation cleared."
             : $"Aggregated by {string.Join(" > ", activeAggregateColumns)}.");
     }
 
-    private void ClearAggregate_Click(object sender, RoutedEventArgs e)
+    private void ClearAggregate_Click(object? sender, RoutedEventArgs e)
     {
         activeAggregateColumns.Clear();
         ApplyAggregation();
@@ -269,7 +260,7 @@ public partial class MainWindow : Window
         ApplyAggregation();
     }
 
-    private void SelectAllVisible_Changed(object sender, RoutedEventArgs e)
+    private void SelectAllVisible_Changed(object? sender, RoutedEventArgs e)
     {
         if (!IsLoaded)
         {
@@ -277,31 +268,16 @@ public partial class MainWindow : Window
         }
 
         var isSelected = SelectAllCheckBox.IsChecked == true;
-        foreach (var row in sessions)
+        foreach (var row in sessionView.Select(entry => entry.Row).Where(row => row is not null).Distinct())
         {
-            row.IsSelected = isSelected;
+            row!.IsSelected = isSelected;
         }
 
+        RefreshGroupSelectionStates();
         UpdateSummary();
     }
 
-    private void GroupSelection_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not System.Windows.Controls.CheckBox checkBox || checkBox.Tag is not System.Collections.IEnumerable items)
-        {
-            return;
-        }
-
-        var isSelected = checkBox.IsChecked == true;
-        foreach (var row in EnumerateGroupRows(items))
-        {
-            row.IsSelected = isSelected;
-        }
-
-        UpdateSummary();
-    }
-
-    private void SessionsGrid_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    private void SessionsGrid_KeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key != Key.Space)
         {
@@ -314,30 +290,31 @@ public partial class MainWindow : Window
 
     private void ToggleKeyboardSelection()
     {
-        var rows = SessionsGrid.SelectedItems
-            .OfType<SessionRow>()
+        var entries = SessionsGrid.SelectedItems
+            .OfType<SessionGridEntry>()
             .ToList();
 
-        if (rows.Count == 0 && SessionsGrid.CurrentItem is SessionRow currentRow)
+        if (entries.Count == 0 && SessionsGrid.SelectedItem is SessionGridEntry currentEntry)
         {
-            rows.Add(currentRow);
+            entries.Add(currentEntry);
         }
 
-        if (rows.Count == 0)
+        if (entries.Count == 0)
         {
             return;
         }
 
-        var nextValue = rows.Any(row => !row.IsSelected);
-        foreach (var row in rows)
+        var nextValue = entries.Any(entry => !entry.IsSelected);
+        foreach (var entry in entries)
         {
-            row.IsSelected = nextValue;
+            entry.IsSelected = nextValue;
         }
 
+        RefreshGroupSelectionStates();
         UpdateSummary();
     }
 
-    private void SessionsGrid_Sorting(object sender, DataGridSortingEventArgs e)
+    private void SessionsGrid_Sorting(object? sender, DataGridColumnEventArgs e)
     {
         var key = e.Column.SortMemberPath;
         if (string.IsNullOrWhiteSpace(key))
@@ -345,28 +322,26 @@ public partial class MainWindow : Window
             return;
         }
 
-        e.Handled = true;
         var nextDirection = GetNextSortDirection(key);
         if (nextDirection is null)
         {
             activeSorts.Remove(key);
-            e.Column.SortDirection = null;
         }
         else
         {
             activeSorts[key] = nextDirection.Value;
-            e.Column.SortDirection = nextDirection;
         }
 
-        ApplySorts();
+        RebuildSessionView();
+        SetStatus(activeSorts.Count == 0 ? "Sorting cleared." : $"Sorted by {string.Join(", ", GetOrderedSorts().Select(sort => sort.Key))}.");
     }
 
     private void SessionsGrid_ColumnReordered(object? sender, DataGridColumnEventArgs e)
     {
-        ApplySorts();
+        RebuildSessionView();
     }
 
-    private async void SessionsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private async void SessionsGrid_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         UpdateMetadataList();
         await UpdateFileListAsync();
@@ -377,19 +352,25 @@ public partial class MainWindow : Window
         scanCancellation?.Cancel();
         scanCancellation = new CancellationTokenSource();
         var cancellationToken = scanCancellation.Token;
-        var source = SourcePathTextBox.Text.Trim();
+        var source = GetText(SourcePathTextBox);
+
+        foreach (var row in sessions)
+        {
+            row.PropertyChanged -= SessionRow_PropertyChanged;
+        }
+
         sessions.Clear();
+        sessionView.Clear();
         activeSorts.Clear();
         activeAggregateColumns.Clear();
         ClearGridSortGlyphs();
-        CollectionViewSource.GetDefaultView(sessions).GroupDescriptions.Clear();
         SessionsGrid.SelectedIndex = -1;
         FileListGrid.ItemsSource = null;
         FileListSummaryTextBlock.Text = "Select a session to load its files";
         MetadataGrid.ItemsSource = null;
         MetadataSummaryTextBlock.Text = "Select a session to view metadata";
         SetStatus($"Scanning {source}...");
-        ScanProgressBar.Visibility = Visibility.Visible;
+        ScanProgressBar.IsVisible = true;
         ScanButton.IsEnabled = false;
 
         var loaded = 0;
@@ -401,7 +382,7 @@ public partial class MainWindow : Window
             try
             {
                 SetStatus("Loading Copilot SDK session list...");
-                copilotSdkSessionIds = await copilotSdkSessionService.GetSessionIdsAsync(CopilotHomePathTextBox.Text.Trim(), cancellationToken);
+                copilotSdkSessionIds = await copilotSdkSessionService.GetSessionIdsAsync(GetText(CopilotHomePathTextBox), cancellationToken);
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
@@ -414,13 +395,14 @@ public partial class MainWindow : Window
                 foreach (var row in scanner.EnumerateRows(source, copilotSdkSessionIds))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    await Dispatcher.InvokeAsync(() =>
+                    await Dispatcher.UIThread.InvokeAsync(() =>
                     {
                         AddSessionRow(row);
                         loaded++;
+
                         if (loaded == 1)
                         {
-                            SessionsGrid.SelectedItem = row;
+                            SessionsGrid.SelectedItem = sessionView.FirstOrDefault(entry => entry.Row == row);
                         }
 
                         SetStatus($"Scanning {source}... loaded {loaded} session(s).");
@@ -438,7 +420,7 @@ public partial class MainWindow : Window
         }
         finally
         {
-            ScanProgressBar.Visibility = Visibility.Collapsed;
+            ScanProgressBar.IsVisible = false;
             ScanButton.IsEnabled = true;
             UpdateSummary();
         }
@@ -448,6 +430,7 @@ public partial class MainWindow : Window
     {
         row.PropertyChanged += SessionRow_PropertyChanged;
         sessions.Add(row);
+        RebuildSessionView();
         UpdateSummary();
     }
 
@@ -465,22 +448,20 @@ public partial class MainWindow : Window
         SessionsGrid.Columns.Add(new DataGridCheckBoxColumn
         {
             Header = string.Empty,
-            Binding = new Binding(nameof(SessionRow.IsSelected)) { Mode = BindingMode.TwoWay, UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged },
-            Width = 42,
+            Binding = new Binding(nameof(SessionGridEntry.IsSelected)) { Mode = BindingMode.TwoWay },
+            Width = new DataGridLength(42),
             CanUserReorder = false,
             CanUserSort = false
         });
 
-        var keys = SessionColumns.DefaultVisible;
-
-        foreach (var key in keys)
+        foreach (var key in SessionColumns.DefaultVisible)
         {
             aggregateColumns.Add(key);
             SessionsGrid.Columns.Add(new DataGridTextColumn
             {
                 Header = key,
                 SortMemberPath = key,
-                Binding = new Binding { Path = new PropertyPath("[(0)]", key), Mode = BindingMode.OneWay },
+                Binding = new Binding($"[{key}]") { Mode = BindingMode.OneWay },
                 IsReadOnly = true,
                 MinWidth = GetMinimumColumnWidth(key),
                 Width = GetInitialColumnWidth(key)
@@ -532,24 +513,6 @@ public partial class MainWindow : Window
         return new DataGridLength(width, DataGridLengthUnitType.Pixel);
     }
 
-    private static IEnumerable<SessionRow> EnumerateGroupRows(System.Collections.IEnumerable items)
-    {
-        foreach (var item in items)
-        {
-            if (item is SessionRow row)
-            {
-                yield return row;
-            }
-            else if (item is CollectionViewGroup group)
-            {
-                foreach (var childRow in EnumerateGroupRows(group.Items))
-                {
-                    yield return childRow;
-                }
-            }
-        }
-    }
-
     private ListSortDirection? GetNextSortDirection(string key)
     {
         if (!activeSorts.TryGetValue(key, out var current))
@@ -560,52 +523,103 @@ public partial class MainWindow : Window
         return current == ListSortDirection.Ascending ? ListSortDirection.Descending : null;
     }
 
-    private void ApplySorts()
+    private IReadOnlyList<(string Key, ListSortDirection Direction)> GetOrderedSorts()
     {
-        var view = CollectionViewSource.GetDefaultView(sessions);
-        if (view is not ListCollectionView listView)
-        {
-            return;
-        }
-
-        var orderedSorts = SessionsGrid.Columns
+        return SessionsGrid.Columns
             .Where(column => !string.IsNullOrWhiteSpace(column.SortMemberPath) && activeSorts.ContainsKey(column.SortMemberPath))
             .OrderBy(column => column.DisplayIndex)
-            .Select(column => (column.SortMemberPath, activeSorts[column.SortMemberPath]))
+            .Select(column => (column.SortMemberPath!, activeSorts[column.SortMemberPath!]))
             .ToList();
+    }
 
-        listView.CustomSort = orderedSorts.Count == 0 ? null : new SessionRowComparer(orderedSorts);
-        listView.Refresh();
-
+    private IReadOnlyList<SessionRow> GetOrderedRows()
+    {
+        var orderedSorts = GetOrderedSorts();
         if (orderedSorts.Count == 0)
         {
-            SetStatus("Sorting cleared.");
+            return sessions.ToList();
+        }
+
+        var comparer = new SessionRowComparer(orderedSorts);
+        return sessions.OrderBy(row => row, comparer).ToList();
+    }
+
+    private void RebuildSessionView()
+    {
+        var selectedRow = (SessionsGrid.SelectedItem as SessionGridEntry)?.Row;
+        sessionView.Clear();
+
+        var orderedRows = GetOrderedRows();
+        if (activeAggregateColumns.Count == 0)
+        {
+            foreach (var row in orderedRows)
+            {
+                sessionView.Add(SessionGridEntry.ForRow(row));
+            }
         }
         else
         {
-            SetStatus($"Sorted by {string.Join(", ", orderedSorts.Select(sort => sort.Item1))}.");
+            AddGroupedEntries(orderedRows, 0);
         }
+
+        RefreshGroupSelectionStates();
+        SessionsGrid.SelectedItem = selectedRow is null
+            ? null
+            : sessionView.FirstOrDefault(entry => entry.Row == selectedRow);
+    }
+
+    private void AddGroupedEntries(IReadOnlyList<SessionRow> rows, int level)
+    {
+        if (level >= activeAggregateColumns.Count)
+        {
+            foreach (var row in rows)
+            {
+                sessionView.Add(SessionGridEntry.ForRow(row));
+            }
+
+            return;
+        }
+
+        var key = activeAggregateColumns[level];
+        foreach (var group in rows.GroupBy(row => NormalizeGroupValue(row[key])).OrderBy(group => group.Key, StringComparer.CurrentCultureIgnoreCase))
+        {
+            var groupRows = group.ToList();
+            sessionView.Add(SessionGridEntry.ForGroup(key, group.Key, level, groupRows));
+            AddGroupedEntries(groupRows, level + 1);
+        }
+    }
+
+    private static string NormalizeGroupValue(string value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? "(blank)" : value;
     }
 
     private void ClearGridSortGlyphs()
     {
-        foreach (var column in SessionsGrid.Columns)
-        {
-            column.SortDirection = null;
-        }
     }
 
-    private void BrowseInto(System.Windows.Controls.TextBox textBox)
+    private async Task BrowseIntoAsync(TextBox textBox, string title)
     {
-        using var dialog = new WinForms.FolderBrowserDialog
+        var currentPath = GetText(textBox);
+        IStorageFolder? suggestedFolder = null;
+        if (Directory.Exists(currentPath))
         {
-            InitialDirectory = Directory.Exists(textBox.Text) ? textBox.Text : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            UseDescriptionForTitle = true
-        };
+            suggestedFolder = await StorageProvider.TryGetFolderFromPathAsync(currentPath);
+        }
 
-        if (dialog.ShowDialog() == WinForms.DialogResult.OK)
+        suggestedFolder ??= await StorageProvider.TryGetFolderFromPathAsync(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
-            textBox.Text = dialog.SelectedPath;
+            Title = title,
+            AllowMultiple = false,
+            SuggestedStartLocation = suggestedFolder
+        });
+
+        var selectedPath = folders.FirstOrDefault()?.Path.LocalPath;
+        if (!string.IsNullOrWhiteSpace(selectedPath))
+        {
+            textBox.Text = selectedPath;
         }
     }
 
@@ -626,11 +640,12 @@ public partial class MainWindow : Window
             sessions.Remove(row);
         }
 
+        RebuildSessionView();
         _ = UpdateFileListAsync();
         UpdateSummary();
     }
 
-    private void ReportOperation(string verb, int successCount, IReadOnlyList<string> errors)
+    private async Task ReportOperationAsync(string verb, int successCount, IReadOnlyList<string> errors)
     {
         if (errors.Count == 0)
         {
@@ -638,7 +653,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        MessageBox.Show(string.Join(Environment.NewLine, errors), "Some sessions could not be processed", MessageBoxButton.OK, MessageBoxImage.Warning);
+        await ShowMessageAsync("Some sessions could not be processed", string.Join(Environment.NewLine, errors));
         SetStatus($"{verb} {successCount} session folder(s); {errors.Count} failed.");
     }
 
@@ -646,6 +661,7 @@ public partial class MainWindow : Window
     {
         if (e.PropertyName == nameof(SessionRow.IsSelected))
         {
+            RefreshGroupSelectionStates();
             UpdateSummary();
         }
     }
@@ -655,6 +671,14 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(CopilotSdkSessionRow.IsSelected))
         {
             UpdateCopilotSdkSummary();
+        }
+    }
+
+    private void RefreshGroupSelectionStates()
+    {
+        foreach (var entry in sessionView.Where(entry => entry.IsGroup))
+        {
+            entry.RefreshSelection();
         }
     }
 
@@ -681,15 +705,15 @@ public partial class MainWindow : Window
 
         copilotSdkSessions.Clear();
         UpdateCopilotSdkSummary();
-        CopilotSdkProgressBar.Visibility = Visibility.Visible;
+        CopilotSdkProgressBar.IsVisible = true;
         LoadCopilotSdkSessionsButton.IsEnabled = false;
         SetStatus("Loading Copilot SDK sessions...");
 
         try
         {
             var loaded = await copilotSdkSessionService.LoadSessionsAsync(
-                CopilotHomePathTextBox.Text.Trim(),
-                SourcePathTextBox.Text.Trim(),
+                GetText(CopilotHomePathTextBox),
+                GetText(SourcePathTextBox),
                 cancellationToken);
 
             foreach (var session in loaded)
@@ -707,19 +731,19 @@ public partial class MainWindow : Window
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            MessageBox.Show(exception.Message, "Unable to load Copilot SDK sessions", MessageBoxButton.OK, MessageBoxImage.Warning);
+            await ShowMessageAsync("Unable to load Copilot SDK sessions", exception.Message);
             SetStatus("Unable to load Copilot SDK sessions.");
         }
         finally
         {
-            CopilotSdkProgressBar.Visibility = Visibility.Collapsed;
+            CopilotSdkProgressBar.IsVisible = false;
             LoadCopilotSdkSessionsButton.IsEnabled = true;
         }
     }
 
     private async Task UpdateFileListAsync()
     {
-        if (SessionsGrid.SelectedItem is SessionRow row)
+        if (SessionsGrid.SelectedItem is SessionGridEntry { Row: { } row })
         {
             fileListCancellation?.Cancel();
             fileListCancellation = new CancellationTokenSource();
@@ -751,13 +775,15 @@ public partial class MainWindow : Window
         {
             fileListCancellation?.Cancel();
             FileListGrid.ItemsSource = null;
-            FileListSummaryTextBlock.Text = "No session selected";
+            FileListSummaryTextBlock.Text = SessionsGrid.SelectedItem is SessionGridEntry { IsGroup: true }
+                ? "Group selected"
+                : "No session selected";
         }
     }
 
     private void UpdateMetadataList()
     {
-        if (SessionsGrid.SelectedItem is SessionRow row)
+        if (SessionsGrid.SelectedItem is SessionGridEntry { Row: { } row })
         {
             var values = row.Values
                 .OrderBy(value => value.Key, StringComparer.CurrentCultureIgnoreCase)
@@ -768,8 +794,93 @@ public partial class MainWindow : Window
         else
         {
             MetadataGrid.ItemsSource = null;
-            MetadataSummaryTextBlock.Text = "No session selected";
+            MetadataSummaryTextBlock.Text = SessionsGrid.SelectedItem is SessionGridEntry { IsGroup: true }
+                ? "Group selected"
+                : "No session selected";
         }
+    }
+
+    private async Task<bool> ConfirmAsync(string title, string message)
+    {
+        var result = await ShowDialogAsync(title, message, "Yes", "No");
+        return result == "Yes";
+    }
+
+    private async Task ShowMessageAsync(string title, string message)
+    {
+        await ShowDialogAsync(title, message, "OK");
+    }
+
+    private async Task<string> ShowDialogAsync(string title, string message, string primaryText, string? secondaryText = null)
+    {
+        var body = new TextBlock
+        {
+            Text = message,
+            TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+            Margin = new Avalonia.Thickness(0, 0, 0, 18)
+        };
+        Grid.SetRow(body, 0);
+
+        var buttons = new StackPanel
+        {
+            Orientation = Avalonia.Layout.Orientation.Horizontal,
+            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right
+        };
+        Grid.SetRow(buttons, 1);
+
+        var primaryButton = CreateDialogButton(primaryText);
+        buttons.Children.Add(primaryButton);
+        if (secondaryText is not null)
+        {
+            buttons.Children.Add(CreateDialogButton(secondaryText));
+        }
+
+        var content = new Grid
+        {
+            Margin = new Avalonia.Thickness(18),
+            RowDefinitions = new RowDefinitions("*,Auto")
+        };
+        content.Children.Add(body);
+        content.Children.Add(buttons);
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 520,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            Content = content
+        };
+
+        string? result = null;
+        foreach (var button in buttons.Children.OfType<Button>())
+        {
+            button.Click += (_, _) =>
+            {
+                result = button.Content?.ToString();
+                dialog.Close();
+            };
+        }
+
+        await dialog.ShowDialog(this);
+        return result ?? primaryText;
+    }
+
+    private static Button CreateDialogButton(string text)
+    {
+        return new Button
+        {
+            Content = text,
+            MinWidth = 88,
+            Margin = new Avalonia.Thickness(8, 0, 0, 0),
+            Padding = new Avalonia.Thickness(14, 8)
+        };
+    }
+
+    private static string GetText(TextBox textBox)
+    {
+        return textBox.Text?.Trim() ?? string.Empty;
     }
 
     private void SetStatus(string message)

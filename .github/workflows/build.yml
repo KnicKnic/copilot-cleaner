@@ -15,15 +15,25 @@ env:
 
 jobs:
   build:
-    name: Windows build
-    runs-on: windows-latest
+    name: Build ${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            rid: win-x64
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 8.0.x
 
@@ -37,14 +47,14 @@ jobs:
         run: >-
           dotnet publish CopilotCleaner.csproj
           --configuration Release
-          --runtime win-x64
+          --runtime ${{ matrix.rid }}
           --self-contained false
-          --output artifacts/CopilotCleaner-win-x64
+          --output artifacts/CopilotCleaner-${{ matrix.rid }}
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: CopilotCleaner-win-x64-framework-dependent
-          path: artifacts/CopilotCleaner-win-x64/
+          name: CopilotCleaner-${{ matrix.rid }}-framework-dependent
+          path: artifacts/CopilotCleaner-${{ matrix.rid }}/

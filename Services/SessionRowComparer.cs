@@ -4,18 +4,23 @@ using CopilotCleaner.Models;
 
 namespace CopilotCleaner.Services;
 
-public sealed class SessionRowComparer(IReadOnlyList<(string Key, ListSortDirection Direction)> sorts) : IComparer
+public sealed class SessionRowComparer(IReadOnlyList<(string Key, ListSortDirection Direction)> sorts) : IComparer, IComparer<SessionRow>
 {
-    public int Compare(object? x, object? y)
+    public int Compare(SessionRow? left, SessionRow? right)
     {
-        if (ReferenceEquals(x, y))
+        if (ReferenceEquals(left, right))
         {
             return 0;
         }
 
-        if (x is not SessionRow left || y is not SessionRow right)
+        if (left is null)
         {
-            return 0;
+            return -1;
+        }
+
+        if (right is null)
+        {
+            return 1;
         }
 
         foreach (var sort in sorts)
@@ -28,6 +33,11 @@ public sealed class SessionRowComparer(IReadOnlyList<(string Key, ListSortDirect
         }
 
         return string.Compare(left.FolderName, right.FolderName, StringComparison.CurrentCultureIgnoreCase);
+    }
+
+    public int Compare(object? x, object? y)
+    {
+        return Compare(x as SessionRow, y as SessionRow);
     }
 
     private static int CompareValues(object? left, object? right)

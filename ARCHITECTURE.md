@@ -1,11 +1,11 @@
 # Architecture
 
-Copilot Cleaner is a local Windows desktop app built with C# and WPF. It inspects GitHub Copilot session-state folders on disk, lists SDK-visible Copilot sessions, and lets the user decide which session-state folders or SDK sessions to clean up. The current target framework is `net8.0-windows` because the UI depends on WPF and Windows Forms dialogs.
+Copilot Cleaner is a local cross-platform desktop app built with C# and Avalonia. It inspects GitHub Copilot session-state folders on disk, lists SDK-visible Copilot sessions, and lets the user decide which session-state folders or SDK sessions to clean up. The project targets `net8.0` so it can build and publish for Windows, Linux, and macOS.
 
 ## Project Structure
 
-- `App.xaml` and `App.xaml.cs`: WPF application entry point.
-- `MainWindow.xaml` and `MainWindow.xaml.cs`: main UI, grid behavior, aggregation controls, selection handling, and cleanup commands.
+- `Program.cs`, `App.axaml`, and `App.xaml.cs`: Avalonia desktop application entry point.
+- `MainWindow.axaml` and `MainWindow.xaml.cs`: main UI, grid behavior, aggregation controls, selection handling, folder picking, and cleanup commands.
 - `Models/`: data models used by the UI.
 - `Services/`: filesystem scanning, metadata parsing, row comparison, grouping, and cleanup operations.
 
@@ -40,7 +40,7 @@ The main window has three primary areas:
 - A selected-session details area with lazy file-list loading and full flattened metadata values.
 - A Copilot SDK Sessions tab with SDK home selection, SDK session loading, SDK metadata columns, missing-session-state selection, and SDK-backed deletion.
 
-Sorting is tracked per column and applied according to the visible left-to-right column order. Aggregation uses WPF collection grouping, supports multiple ordered grouping levels, and supports group-level checkbox selection across nested groups.
+Sorting is tracked per column and applied according to the visible left-to-right column order. Aggregation is represented by explicit group rows in the session grid, supports multiple ordered grouping levels, and supports group-level checkbox selection across nested groups.
 
 ## Safety Boundaries
 
@@ -48,8 +48,8 @@ Delete operations ask for confirmation. Move operations create the destination f
 
 ## Platform Portability
 
-The service and model layers are designed around .NET filesystem and parsing APIs and can be reused by a cross-platform UI. The current WPF window, WPF data binding, WPF grouping, and Windows Forms folder browser usage are Windows-only. A cross-platform version would keep `Models/` and most of `Services/`, replace `MainWindow.xaml` and `MainWindow.xaml.cs` with a UI built on Avalonia, .NET MAUI, or a local web frontend, and retarget the shared logic to a non-Windows target framework.
+The UI uses Avalonia controls and storage-provider folder pickers rather than WPF or Windows Forms APIs. The service and model layers are designed around .NET filesystem and parsing APIs. Release automation publishes self-contained app artifacts for Windows, Linux, and macOS, but runtime behavior still depends on the host having Copilot session-state data and Copilot SDK/CLI support.
 
 ## Automation
 
-GitHub Actions includes a Windows build workflow for pushes and pull requests to `main`. Release automation runs from `v*` tags or manual dispatch, publishes self-contained Windows x64 and Windows arm64 ZIP files, and creates a GitHub Release. Dependabot tracks NuGet and GitHub Actions updates weekly.
+GitHub Actions includes a Windows, Linux, and macOS build workflow for pushes and pull requests to `main`. Release automation runs from `v*` tags or manual dispatch, publishes self-contained `win-x64`, `win-arm64`, `linux-x64`, `osx-x64`, and `osx-arm64` ZIP files, and creates a GitHub Release. Dependabot tracks NuGet and GitHub Actions updates weekly.

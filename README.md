@@ -1,8 +1,6 @@
 # Copilot Cleaner
 
-Copilot Cleaner is a local C# WPF app for reviewing and cleaning GitHub Copilot session-state folders.
-
-The current app is Windows-only because it uses WPF and targets `net8.0-windows`.
+Copilot Cleaner is a local cross-platform C# Avalonia desktop app for reviewing and cleaning GitHub Copilot session-state folders.
 
 By default it scans:
 
@@ -43,19 +41,21 @@ dotnet restore CopilotCleaner.csproj
 dotnet build CopilotCleaner.csproj --configuration Release
 ```
 
-To create a framework-dependent Windows x64 publish output:
+To create a framework-dependent publish output for a target runtime:
 
 ```powershell
 dotnet publish CopilotCleaner.csproj --configuration Release --runtime win-x64 --self-contained false --output artifacts/CopilotCleaner-win-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish CopilotCleaner.csproj --configuration Release --runtime linux-x64 --self-contained false --output artifacts/CopilotCleaner-linux-x64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+dotnet publish CopilotCleaner.csproj --configuration Release --runtime osx-arm64 --self-contained false --output artifacts/CopilotCleaner-osx-arm64 -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 ## Release
 
-GitHub Actions builds the app on Windows for pushes and pull requests to `main`. Tags that match `v*` run the release workflow, publish self-contained `win-x64` and `win-arm64` ZIP artifacts, and create a GitHub Release.
+GitHub Actions builds the app for Windows, Linux, and macOS for pushes and pull requests to `main`. Tags that match `v*` run the release workflow, publish self-contained `win-x64`, `win-arm64`, `linux-x64`, `osx-x64`, and `osx-arm64` ZIP artifacts, and create a GitHub Release.
 
 ## Cross-Platform Status
 
-The filesystem scanning, metadata parsing, and Copilot SDK service layers are mostly portable .NET code, but the current UI is WPF and uses Windows Forms folder dialogs. Making the app cross-platform would require moving the UI to a cross-platform desktop framework such as Avalonia, .NET MAUI, or a web UI hosted by a small local service. Avalonia is the closest fit for this app because it supports desktop-style grids and a XAML-like programming model across Windows, macOS, and Linux.
+The app now targets `net8.0` and uses Avalonia for the desktop UI, including cross-platform folder pickers. The service and model layers use portable .NET filesystem and parsing APIs, while cleanup behavior still depends on the local Copilot session-state layout and Copilot SDK/CLI availability on the host system.
 
 ## SDK and File Parsing
 
