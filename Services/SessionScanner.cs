@@ -10,7 +10,7 @@ namespace CopilotCleaner.Services;
 
 public sealed class SessionScanner
 {
-    public IReadOnlyList<SessionRow> Scan(string sourcePath)
+    public IReadOnlyList<SessionRow> Scan(string sourcePath, IReadOnlySet<string>? copilotSdkSessionIds = null)
     {
         if (!Directory.Exists(sourcePath))
         {
@@ -18,12 +18,12 @@ public sealed class SessionScanner
         }
 
         return Directory.EnumerateDirectories(sourcePath)
-            .Select(CreateRow)
+            .Select(path => CreateRow(path, copilotSdkSessionIds))
             .OrderByDescending(row => row.LastWriteTime)
             .ToList();
     }
 
-    public IEnumerable<SessionRow> EnumerateRows(string sourcePath)
+    public IEnumerable<SessionRow> EnumerateRows(string sourcePath, IReadOnlySet<string>? copilotSdkSessionIds = null)
     {
         if (!Directory.Exists(sourcePath))
         {
@@ -35,11 +35,11 @@ public sealed class SessionScanner
             .OrderByDescending(directory => directory.LastWriteTime)
             .Select(directory => directory.FullName))
         {
-            yield return CreateRow(sessionPath);
+            yield return CreateRow(sessionPath, copilotSdkSessionIds);
         }
     }
 
-    private static SessionRow CreateRow(string sessionPath)
+    private static SessionRow CreateRow(string sessionPath, IReadOnlySet<string>? copilotSdkSessionIds)
     {
         var directory = new DirectoryInfo(sessionPath);
         var metadataPath = Path.Combine(sessionPath, "vscode.metadata.json");
@@ -56,6 +56,7 @@ public sealed class SessionScanner
             [SessionColumns.Path] = sessionPath,
             [SessionColumns.HasMetadata] = File.Exists(metadataPath) ? "Yes" : "No",
             [SessionColumns.HasCopilotShell] = File.Exists(copilotShellPath) ? "Yes" : "No",
+            [SessionColumns.HasCopilotSdkSession] = copilotSdkSessionIds is null ? "Unknown" : copilotSdkSessionIds.Contains(directory.Name) ? "Yes" : "No",
             [SessionColumns.HasWorkspace] = File.Exists(workspacePath) ? "Yes" : "No",
             [SessionColumns.FileCount] = topLevelFiles.Count.ToString(CultureInfo.CurrentCulture),
             [SessionColumns.DirectoryCount] = topLevelFolders.Count.ToString(CultureInfo.CurrentCulture),

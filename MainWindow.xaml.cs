@@ -16,15 +16,20 @@ namespace CopilotCleaner;
 public partial class MainWindow : Window
 {
     private readonly SessionScanner scanner = new();
+    private readonly CopilotSdkSessionService copilotSdkSessionService = new();
     private readonly SessionFileOperations fileOperations = new();
     private readonly Dictionary<string, ListSortDirection> activeSorts = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<SessionRow> sessions = [];
+    private readonly ObservableCollection<CopilotSdkSessionRow> copilotSdkSessions = [];
     private readonly ObservableCollection<string> aggregateColumns = [];
     private readonly ObservableCollection<string> activeAggregateColumns = [];
     private CancellationTokenSource? scanCancellation;
     private CancellationTokenSource? fileListCancellation;
+    private CancellationTokenSource? copilotSdkCancellation;
 
     public ObservableCollection<SessionRow> Sessions => sessions;
+
+    public ObservableCollection<CopilotSdkSessionRow> CopilotSdkSessions => copilotSdkSessions;
 
     public MainWindow()
     {
@@ -33,6 +38,7 @@ public partial class MainWindow : Window
 
         SourcePathTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".copilot", "session-state");
         DestinationPathTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".copilot", "old_session-state");
+        CopilotHomePathTextBox.Text = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".copilot");
         AggregateColumnComboBox.ItemsSource = aggregateColumns;
         ActiveAggregateListBox.ItemsSource = activeAggregateColumns;
 
@@ -45,6 +51,90 @@ public partial class MainWindow : Window
         await ScanAsync();
     }
 
+    private async void LoadCopilotSdkSessions_Click(object sender, RoutedEventArgs e)
+    {
+        await LoadCopilotSdkSessionsAsync();
+    }
+
+    private void SelectSdkSessionsWithoutState_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var session in copilotSdkSessions)
+        {
+            session.IsSelected = !session.HasSessionState;
+        }
+
+        UpdateCopilotSdkSummary();
+    }
+
+    private void ClearCopilotSdkSelection_Click(object sender, RoutedEventArgs e)
+    {
+        foreach (var session in copilotSdkSessions)
+        {
+            session.IsSelected = false;
+        }
+
+        UpdateCopilotSdkSummary();
+    }
+
+    private async void DeleteSelectedCopilotSdkSessions_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = copilotSdkSessions.Where(session => session.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            SetStatus("No Copilot SDK sessions selected.");
+            return;
+        }
+
+        var result = MessageBox.Show(
+            $"Delete {selected.Count} selected Copilot session(s) using the Copilot SDK? This removes SDK-managed session data and does not move session-state folders.",
+            "Confirm Copilot SDK cleanup",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning,
+            MessageBoxResult.No);
+
+        if (result != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        LoadCopilotSdkSessionsButton.IsEnabled = false;
+        DeleteSelectedCopilotSdkSessionsButton.IsEnabled = false;
+        CopilotSdkProgressBar.Visibility = Visibility.Visible;
+        SetStatus($"Deleting {selected.Count} Copilot SDK session(s)...");
+
+        try
+        {
+            var errors = await copilotSdkSessionService.DeleteSessionsAsync(
+                CopilotHomePathTextBox.Text.Trim(),
+                selected.Select(session => session.SessionId).ToList(),
+                CancellationToken.None);
+
+            if (errors.Count > 0)
+            {
+                MessageBox.Show(string.Join(Environment.NewLine, errors), "Some Copilot SDK sessions could not be deleted", MessageBoxButton.OK, MessageBoxImage.Warning);
+                SetStatus($"Deleted {selected.Count - errors.Count} Copilot SDK session(s); {errors.Count} failed.");
+            }
+            else
+            {
+                SetStatus($"Deleted {selected.Count} Copilot SDK session(s).");
+            }
+
+            await LoadCopilotSdkSessionsAsync();
+            await ScanAsync();
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            MessageBox.Show(exception.Message, "Copilot SDK cleanup failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetStatus("Copilot SDK cleanup failed.");
+        }
+        finally
+        {
+            CopilotSdkProgressBar.Visibility = Visibility.Collapsed;
+            LoadCopilotSdkSessionsButton.IsEnabled = true;
+            DeleteSelectedCopilotSdkSessionsButton.IsEnabled = true;
+        }
+    }
+
     private void BrowseSource_Click(object sender, RoutedEventArgs e)
     {
         BrowseInto(SourcePathTextBox);
@@ -53,6 +143,11 @@ public partial class MainWindow : Window
     private void BrowseDestination_Click(object sender, RoutedEventArgs e)
     {
         BrowseInto(DestinationPathTextBox);
+    }
+
+    private void BrowseCopilotHome_Click(object sender, RoutedEventArgs e)
+    {
+        BrowseInto(CopilotHomePathTextBox);
     }
 
     private void MoveSelected_Click(object sender, RoutedEventArgs e)
@@ -298,12 +393,25 @@ public partial class MainWindow : Window
         ScanButton.IsEnabled = false;
 
         var loaded = 0;
+        HashSet<string>? copilotSdkSessionIds = null;
+        string? copilotSdkStatus = null;
 
         try
         {
+            try
+            {
+                SetStatus("Loading Copilot SDK session list...");
+                copilotSdkSessionIds = await copilotSdkSessionService.GetSessionIdsAsync(CopilotHomePathTextBox.Text.Trim(), cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                copilotSdkStatus = $" Copilot SDK session list unavailable: {exception.Message}";
+            }
+
+            SetStatus($"Scanning {source}...");
             await Task.Run(async () =>
             {
-                foreach (var row in scanner.EnumerateRows(source))
+                foreach (var row in scanner.EnumerateRows(source, copilotSdkSessionIds))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     await Dispatcher.InvokeAsync(() =>
@@ -320,7 +428,9 @@ public partial class MainWindow : Window
                 }
             }, cancellationToken);
 
-            SetStatus(loaded == 0 ? $"No session folders found in {source}." : $"Loaded {loaded} session folder(s).");
+            SetStatus(loaded == 0
+                ? $"No session folders found in {source}.{copilotSdkStatus}"
+                : $"Loaded {loaded} session folder(s).{copilotSdkStatus}");
         }
         catch (OperationCanceledException)
         {
@@ -339,6 +449,12 @@ public partial class MainWindow : Window
         row.PropertyChanged += SessionRow_PropertyChanged;
         sessions.Add(row);
         UpdateSummary();
+    }
+
+    private void AddCopilotSdkSession(CopilotSdkSessionRow session)
+    {
+        session.PropertyChanged += CopilotSdkSession_PropertyChanged;
+        copilotSdkSessions.Add(session);
     }
 
     private void RebuildColumns()
@@ -398,6 +514,7 @@ public partial class MainWindow : Window
             SessionColumns.WorkspaceSummary => 320,
             SessionColumns.MetadataOrigin => 180,
             SessionColumns.HasCopilotShell => 150,
+            SessionColumns.HasCopilotSdkSession => 160,
             SessionColumns.LastModified => 150,
             SessionColumns.Size => 90,
             SessionColumns.InUseLock => 130,
@@ -533,9 +650,71 @@ public partial class MainWindow : Window
         }
     }
 
+    private void CopilotSdkSession_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(CopilotSdkSessionRow.IsSelected))
+        {
+            UpdateCopilotSdkSummary();
+        }
+    }
+
     private void UpdateSummary()
     {
         SummaryTextBlock.Text = $"{sessions.Count} sessions | {sessions.Count(row => row.IsSelected)} selected";
+    }
+
+    private void UpdateCopilotSdkSummary()
+    {
+        CopilotSdkSummaryTextBlock.Text = $"{copilotSdkSessions.Count} SDK sessions | {copilotSdkSessions.Count(session => session.IsSelected)} selected | {copilotSdkSessions.Count(session => !session.HasSessionState)} without session-state";
+    }
+
+    private async Task LoadCopilotSdkSessionsAsync()
+    {
+        copilotSdkCancellation?.Cancel();
+        copilotSdkCancellation = new CancellationTokenSource();
+        var cancellationToken = copilotSdkCancellation.Token;
+
+        foreach (var session in copilotSdkSessions)
+        {
+            session.PropertyChanged -= CopilotSdkSession_PropertyChanged;
+        }
+
+        copilotSdkSessions.Clear();
+        UpdateCopilotSdkSummary();
+        CopilotSdkProgressBar.Visibility = Visibility.Visible;
+        LoadCopilotSdkSessionsButton.IsEnabled = false;
+        SetStatus("Loading Copilot SDK sessions...");
+
+        try
+        {
+            var loaded = await copilotSdkSessionService.LoadSessionsAsync(
+                CopilotHomePathTextBox.Text.Trim(),
+                SourcePathTextBox.Text.Trim(),
+                cancellationToken);
+
+            foreach (var session in loaded)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AddCopilotSdkSession(session);
+            }
+
+            UpdateCopilotSdkSummary();
+            SetStatus($"Loaded {loaded.Count} Copilot SDK session(s).");
+        }
+        catch (OperationCanceledException)
+        {
+            SetStatus("Copilot SDK session load canceled.");
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            MessageBox.Show(exception.Message, "Unable to load Copilot SDK sessions", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetStatus("Unable to load Copilot SDK sessions.");
+        }
+        finally
+        {
+            CopilotSdkProgressBar.Visibility = Visibility.Collapsed;
+            LoadCopilotSdkSessionsButton.IsEnabled = true;
+        }
     }
 
     private async Task UpdateFileListAsync()

@@ -4,7 +4,9 @@
 
 - Defaults to scanning `~/.copilot/session-state`.
 - Defaults move operations to `~/.copilot/old_session-state`.
+- Defaults the Copilot SDK home path to `~/.copilot`.
 - Allows browsing for both source and destination folders.
+- Allows browsing for the Copilot SDK home folder.
 - Displays an empty-state status message when no session folders are found.
 - Streams session rows into the grid while scanning continues in the background.
 
@@ -12,7 +14,7 @@
 
 The main grid displays high-value filesystem fields and cleanup-oriented summaries. Full flattened metadata remains available in the selected-session details area.
 
-- `Has copilotshell.json`, `workspace.cwd`, last modified time, `workspace.git_root`, `workspace.branch`, `workspace.summary`, and `metadata.origin` as first-class visible columns.
+- `Has copilotshell.json`, `workspace.cwd`, last modified time, `In Copilot SDK list`, `workspace.git_root`, `workspace.branch`, `workspace.summary`, and `metadata.origin` as first-class visible columns.
 - Folder name, full path, last modified time, and total size.
 - Presence of `copilotshell.json`, `vscode.metadata.json`, and `workspace.yaml`.
 - File count, directory count, top-level files, and top-level folders from the session root.
@@ -45,11 +47,20 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 - Selecting a session displays all flattened `vscode.metadata.json`, `copilotshell.json`, and `workspace.yaml` values in a details tab.
 - Metadata detail columns are sortable by key or value.
 
+## Copilot SDK Sessions
+
+- Loads SDK-visible sessions using `GitHub.Copilot.SDK` and `CopilotClient.ListSessionsAsync`.
+- Displays SDK metadata including session ID, start time, modified time, summary, remote status, working directory, git root, repository, and branch.
+- Shows whether each SDK-visible session has a matching local `session-state` folder.
+- Selects SDK sessions that no longer have a matching `session-state` folder.
+- Deletes selected SDK sessions through `CopilotClient.DeleteSessionAsync` after confirmation.
+
 ## Cleanup Actions
 
 - Move selected session folders to the configured destination folder.
 - Avoid overwriting moved folders by adding a numeric suffix when needed.
 - Delete selected session folders after confirmation.
+- Delete selected SDK-visible sessions through the Copilot SDK after confirmation.
 - Report per-session filesystem failures without removing failed rows from the grid.
 
 ## Current Limitations
@@ -58,3 +69,4 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 - Malformed multi-line quoted workspace summaries are salvaged through end-of-file when no closing quote is present.
 - The app does not currently block move or delete actions for sessions that have `inuse.*.lock`; it surfaces the lock status for user judgment.
 - The app does not inspect `session.db` contents.
+- The app does not directly read or write the root `session-store.db`; SDK session operations depend on the GitHub Copilot SDK and Copilot CLI runtime being available.

@@ -9,6 +9,7 @@ public static class SessionColumns
     public const string WorkspaceSummary = "workspace.summary";
     public const string MetadataOrigin = "metadata.origin";
     public const string HasCopilotShell = "Has copilotshell.json";
+    public const string HasCopilotSdkSession = "In Copilot SDK list";
     public const string LastModified = "Last modified";
     public const string Size = "Size";
     public const string Path = "Path";
@@ -38,6 +39,7 @@ public static class SessionColumns
         WorkspaceSummary,
         MetadataOrigin,
         HasCopilotShell,
+        HasCopilotSdkSession,
         LastModified,
         Size,
         Path,
@@ -64,6 +66,7 @@ public static class SessionColumns
         HasCopilotShell,
         WorkspaceCwd,
         LastModified,
+        HasCopilotSdkSession,
         WorkspaceGitRoot,
         WorkspaceBranch,
         WorkspaceSummary,
