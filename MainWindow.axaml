@@ -7,34 +7,48 @@
         MinHeight="620"
         Width="1240"
         MinWidth="960"
-        FontSize="13"
+        FontSize="11"
         Background="#F5F7FA">
     <Window.Styles>
         <Style Selector="DataGrid">
-            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="RowHeight" Value="17" />
+            <Setter Property="ColumnHeaderHeight" Value="20" />
+        </Style>
+        <Style Selector="DataGridRow">
+            <Setter Property="MinHeight" Value="20" />
+        </Style>
+        <Style Selector="DataGridCell">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Padding" Value="1,0" />
+        </Style>
+        <Style Selector="DataGridColumnHeader">
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="MinHeight" Value="22" />
         </Style>
         <Style Selector="Button">
-            <Setter Property="Padding" Value="14,8" />
-            <Setter Property="Margin" Value="0,0,8,0" />
-            <Setter Property="MinWidth" Value="88" />
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="MinWidth" Value="68" />
         </Style>
         <Style Selector="TextBox">
-            <Setter Property="Padding" Value="8,6" />
+            <Setter Property="Padding" Value="6,3" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="ComboBox">
-            <Setter Property="Padding" Value="8,6" />
-            <Setter Property="MinWidth" Value="220" />
+            <Setter Property="Padding" Value="6,3" />
+            <Setter Property="MinWidth" Value="180" />
         </Style>
     </Window.Styles>
 
-    <Grid Margin="16" RowDefinitions="*,Auto">
+    <Grid Margin="12" RowDefinitions="*,Auto">
         <TabControl Grid.Row="0">
             <TabItem Header="Session State">
-                <Grid Margin="0,12,0,0" RowDefinitions="Auto,Auto,*,Auto,220">
-                    <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
-                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,10,Auto">
-                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session state" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0" />
+                <Grid Margin="0,8,0,0" RowDefinitions="Auto,Auto,*,Auto,200">
+                    <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" RowDefinitions="Auto,8,Auto">
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Session state" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,10,0" />
                             <TextBox x:Name="SourcePathTextBox" Grid.Row="0" Grid.Column="1" />
                             <Button Grid.Row="0" Grid.Column="2" Content="Browse" Click="BrowseSource_Click" Margin="8,0,8,0" />
                             <StackPanel Grid.Row="0" Grid.Column="3" Orientation="Horizontal">
@@ -42,7 +56,7 @@
                                 <ProgressBar x:Name="ScanProgressBar" Width="90" Height="8" IsIndeterminate="True" IsVisible="False" VerticalAlignment="Center" Margin="0,0,8,0" />
                             </StackPanel>
 
-                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Move target" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0" />
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Move target" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,10,0" />
                             <TextBox x:Name="DestinationPathTextBox" Grid.Row="2" Grid.Column="1" />
                             <Button Grid.Row="2" Grid.Column="2" Content="Browse" Click="BrowseDestination_Click" Margin="8,0,8,0" />
                             <StackPanel Grid.Row="2" Grid.Column="3" Orientation="Horizontal">
@@ -52,7 +66,7 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="1" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                    <Border Grid.Row="1" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                         <DockPanel LastChildFill="False">
                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                                 <CheckBox x:Name="SelectAllCheckBox" Content="Select all visible" VerticalAlignment="Center" Margin="0,0,16,0" IsCheckedChanged="SelectAllVisible_Changed" />
@@ -74,12 +88,13 @@
                               AutoGenerateColumns="False"
                               CanUserReorderColumns="True"
                               CanUserResizeColumns="True"
-                              CanUserSortColumns="False"
+                              CanUserSortColumns="True"
                               GridLinesVisibility="Horizontal"
                               HeadersVisibility="Column"
                               IsReadOnly="False"
                               ItemsSource="{Binding SessionView}"
                               MinColumnWidth="40"
+                              SelectionMode="Extended"
                               KeyDown="SessionsGrid_KeyDown"
                               Sorting="SessionsGrid_Sorting"
                               ColumnReordered="SessionsGrid_ColumnReordered"
@@ -90,11 +105,11 @@
 
                     <GridSplitter Grid.Row="3" Height="6" HorizontalAlignment="Stretch" Background="Transparent" />
 
-                    <Border Grid.Row="4" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Margin="0,8,0,0">
+                    <Border Grid.Row="4" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Margin="0,6,0,0">
                         <TabControl BorderThickness="0">
                             <TabItem Header="Files">
                                 <Grid RowDefinitions="Auto,*">
-                                    <DockPanel Grid.Row="0" Margin="10,8,10,6">
+                                    <DockPanel Grid.Row="0" Margin="8,5,8,4">
                                         <TextBlock Text="File list" FontWeight="SemiBold" VerticalAlignment="Center" />
                                         <TextBlock x:Name="FileListSummaryTextBlock" DockPanel.Dock="Right" Foreground="#526173" VerticalAlignment="Center" />
                                     </DockPanel>
@@ -121,7 +136,7 @@
                             </TabItem>
                             <TabItem Header="Metadata">
                                 <Grid RowDefinitions="Auto,*">
-                                    <DockPanel Grid.Row="0" Margin="10,8,10,6">
+                                    <DockPanel Grid.Row="0" Margin="8,5,8,4">
                                         <TextBlock Text="Metadata values" FontWeight="SemiBold" VerticalAlignment="Center" />
                                         <TextBlock x:Name="MetadataSummaryTextBlock" DockPanel.Dock="Right" Foreground="#526173" VerticalAlignment="Center" />
                                     </DockPanel>
@@ -148,10 +163,10 @@
             </TabItem>
 
             <TabItem Header="Copilot SDK Sessions">
-                <Grid Margin="0,12,0,0" RowDefinitions="Auto,Auto,*">
-                    <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="14" Margin="0,0,0,12">
+                <Grid Margin="0,8,0,0" RowDefinitions="Auto,Auto,*">
+                    <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="Copilot home" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,12,0" />
+                            <TextBlock Grid.Column="0" Text="Copilot home" VerticalAlignment="Center" FontWeight="SemiBold" Margin="0,0,10,0" />
                             <TextBox x:Name="CopilotHomePathTextBox" Grid.Column="1" />
                             <Button Grid.Column="2" Content="Browse" Click="BrowseCopilotHome_Click" Margin="8,0,8,0" />
                             <StackPanel Grid.Column="3" Orientation="Horizontal">
@@ -161,7 +176,7 @@
                         </Grid>
                     </Border>
 
-                    <Border Grid.Row="1" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,12">
+                    <Border Grid.Row="1" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,8">
                         <DockPanel LastChildFill="False">
                             <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                                 <Button Content="Select missing state" Click="SelectSdkSessionsWithoutState_Click" MinWidth="140" />
@@ -177,13 +192,16 @@
                               AutoGenerateColumns="False"
                               CanUserReorderColumns="True"
                               CanUserResizeColumns="True"
-                              CanUserSortColumns="False"
+                              CanUserSortColumns="True"
+                              Sorting="CopilotSdkSessionsGrid_Sorting"
                               ColumnReordered="CopilotSdkSessionsGrid_ColumnReordered"
                               GridLinesVisibility="Horizontal"
                               HeadersVisibility="Column"
                               IsReadOnly="False"
                               ItemsSource="{Binding CopilotSdkSessions}"
                               MinColumnWidth="40"
+                              SelectionMode="Extended"
+                              KeyDown="CopilotSdkSessionsGrid_KeyDown"
                               Background="White"
                               BorderBrush="#DDE3EA"
                               BorderThickness="1">
@@ -205,7 +223,7 @@
             </TabItem>
         </TabControl>
 
-        <Border Grid.Row="1" Margin="0,12,0,0" Background="Transparent">
+    <Border Grid.Row="1" Margin="0,8,0,0" Background="Transparent">
             <TextBlock x:Name="StatusTextBlock" Foreground="#526173" />
         </Border>
     </Grid>

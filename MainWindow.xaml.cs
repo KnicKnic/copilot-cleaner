@@ -23,8 +23,6 @@ public partial class MainWindow : Window
     private readonly SessionFileOperations fileOperations = new();
     private readonly Dictionary<string, ListSortDirection> activeSorts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ListSortDirection> activeCopilotSdkSorts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Button> sessionColumnHeaders = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, Button> copilotSdkColumnHeaders = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> copilotSdkColumnLabels = new(StringComparer.OrdinalIgnoreCase);
     private readonly ObservableCollection<SessionRow> sessions = [];
     private readonly ObservableCollection<SessionGridEntry> sessionView = [];
@@ -55,6 +53,7 @@ public partial class MainWindow : Window
         RebuildColumns();
         ConfigureCopilotSdkSorting();
         _ = ScanAsync();
+        _ = LoadCopilotSdkSessionsAsync();
     }
 
     private void InitializeComponent()
@@ -116,6 +115,42 @@ public partial class MainWindow : Window
         foreach (var session in copilotSdkSessionRows)
         {
             session.IsSelected = false;
+        }
+
+        UpdateCopilotSdkSummary();
+    }
+
+    private void CopilotSdkSessionsGrid_KeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Space)
+        {
+            return;
+        }
+
+        ToggleCopilotSdkKeyboardSelection();
+        e.Handled = true;
+    }
+
+    private void ToggleCopilotSdkKeyboardSelection()
+    {
+        var sessions = CopilotSdkSessionsGrid.SelectedItems
+            .OfType<CopilotSdkSessionRow>()
+            .ToList();
+
+        if (sessions.Count == 0 && CopilotSdkSessionsGrid.SelectedItem is CopilotSdkSessionRow currentSession)
+        {
+            sessions.Add(currentSession);
+        }
+
+        if (sessions.Count == 0)
+        {
+            return;
+        }
+
+        var nextValue = sessions.Any(session => !session.IsSelected);
+        foreach (var session in sessions)
+        {
+            session.IsSelected = nextValue;
         }
 
         UpdateCopilotSdkSummary();
@@ -394,6 +429,19 @@ public partial class MainWindow : Window
         ApplyCopilotSdkSortHeaders();
     }
 
+    private void CopilotSdkSessionsGrid_Sorting(object? sender, DataGridColumnEventArgs e)
+    {
+        e.Handled = true;
+
+        var key = e.Column.SortMemberPath;
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            return;
+        }
+
+        ToggleCopilotSdkSort(key);
+    }
+
     private async void SessionsGrid_SelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         UpdateMetadataList();
@@ -497,7 +545,6 @@ public partial class MainWindow : Window
     {
         SessionsGrid.Columns.Clear();
         aggregateColumns.Clear();
-        sessionColumnHeaders.Clear();
 
         SessionsGrid.Columns.Add(new DataGridCheckBoxColumn
         {
@@ -513,10 +560,11 @@ public partial class MainWindow : Window
             aggregateColumns.Add(key);
             SessionsGrid.Columns.Add(new DataGridTextColumn
             {
-                Header = CreateSessionColumnHeader(key),
+                Header = key,
                 SortMemberPath = key,
                 Binding = new Binding(".") { Mode = BindingMode.OneWay, Converter = new SessionGridEntryValueConverter(key) },
-                CanUserSort = false,
+                CanUserSort = true,
+                FontSize = 11,
                 IsReadOnly = true,
                 MinWidth = GetMinimumColumnWidth(key),
                 Width = GetInitialColumnWidth(key)
@@ -585,7 +633,6 @@ public partial class MainWindow : Window
 
     private void ConfigureCopilotSdkSorting()
     {
-        copilotSdkColumnHeaders.Clear();
         copilotSdkColumnLabels.Clear();
 
         foreach (var column in CopilotSdkSessionsGrid.Columns)
@@ -598,10 +645,8 @@ public partial class MainWindow : Window
 
             var label = column.Header?.ToString() ?? key;
             copilotSdkColumnLabels[key] = label;
-            var header = CreateSortHeaderButton(label, () => ToggleCopilotSdkSort(key));
-            copilotSdkColumnHeaders[key] = header;
-            column.Header = header;
-            column.CanUserSort = false;
+            column.Header = label;
+            column.CanUserSort = true;
         }
 
         ApplyCopilotSdkSortHeaders();
@@ -821,22 +866,34 @@ public partial class MainWindow : Window
     private void ApplySessionSortHeaders()
     {
         var orderedSorts = GetOrderedSorts();
-        foreach (var header in sessionColumnHeaders)
+        foreach (var column in SessionsGrid.Columns)
         {
-            header.Value.Content = activeSorts.TryGetValue(header.Key, out var direction)
-                ? $"{header.Key} ({GetSortOrdinal(orderedSorts, header.Key)} {GetSortLabel(direction)})"
-                : header.Key;
+            var key = column.SortMemberPath;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            column.Header = activeSorts.TryGetValue(key, out var direction)
+                ? $"{key} ({GetSortOrdinal(orderedSorts, key)} {GetSortLabel(direction)})"
+                : key;
         }
     }
 
     private void ApplyCopilotSdkSortHeaders()
     {
         var orderedSorts = GetOrderedCopilotSdkSorts();
-        foreach (var header in copilotSdkColumnHeaders)
+        foreach (var column in CopilotSdkSessionsGrid.Columns)
         {
-            var label = copilotSdkColumnLabels.GetValueOrDefault(header.Key, header.Key);
-            header.Value.Content = activeCopilotSdkSorts.TryGetValue(header.Key, out var direction)
-                ? $"{label} ({GetSortOrdinal(orderedSorts, header.Key)} {GetSortLabel(direction)})"
+            var key = column.SortMemberPath;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                continue;
+            }
+
+            var label = copilotSdkColumnLabels.GetValueOrDefault(key, key);
+            column.Header = activeCopilotSdkSorts.TryGetValue(key, out var direction)
+                ? $"{label} ({GetSortOrdinal(orderedSorts, key)} {GetSortLabel(direction)})"
                 : label;
         }
     }
@@ -852,33 +909,6 @@ public partial class MainWindow : Window
         }
 
         return 0;
-    }
-
-    private Button CreateSessionColumnHeader(string key)
-    {
-        var header = CreateSortHeaderButton(key, () => ToggleSessionSort(key));
-
-        sessionColumnHeaders[key] = header;
-        return header;
-    }
-
-    private static Button CreateSortHeaderButton(string text, Action sortAction)
-    {
-        var header = new Button
-        {
-            Content = text,
-            Padding = new Avalonia.Thickness(4, 0),
-            Margin = new Avalonia.Thickness(0),
-            MinWidth = 0,
-            FontSize = 12,
-            HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch,
-            HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Left,
-            Background = Avalonia.Media.Brushes.Transparent,
-            BorderThickness = new Avalonia.Thickness(0)
-        };
-
-        header.Click += (_, _) => sortAction();
-        return header;
     }
 
     private static string GetSortLabel(ListSortDirection direction)

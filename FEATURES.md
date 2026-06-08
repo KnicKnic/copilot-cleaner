@@ -5,6 +5,7 @@
 - Defaults to scanning `~/.copilot/session-state`.
 - Defaults move operations to `~/.copilot/old_session-state`.
 - Defaults the Copilot SDK home path to `~/.copilot`.
+- Automatically loads SDK-visible sessions from the default Copilot SDK home path on startup.
 - Allows browsing for both source and destination folders.
 - Allows browsing for the Copilot SDK home folder.
 - Displays an empty-state status message when no session folders are found.
@@ -25,6 +26,7 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 
 ## Grid Interaction
 
+- The Avalonia UI uses compact desktop text, control padding, grid-cell text, and row spacing for dense session review.
 - Each session row has a checkbox for cleanup selection.
 - Pressing Space in the session grid toggles the focused row or all selected rows.
 - A select-all-visible checkbox toggles all currently loaded session rows.
@@ -52,6 +54,7 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 - Loads SDK-visible sessions using `GitHub.Copilot.SDK` and `CopilotClient.ListSessionsAsync`.
 - Displays SDK metadata including session ID, start time, modified time, summary, remote status, working directory, git root, repository, and branch.
 - Sorts SDK session columns with the same multi-column, visible-left-to-right precedence used by the Session State grid.
+- Supports multi-row SDK selection and Space toggling for selected SDK session checkboxes.
 - Shows whether each SDK-visible session has a matching local `session-state` folder.
 - Selects SDK sessions that no longer have a matching `session-state` folder.
 - Deletes selected SDK sessions through `CopilotClient.DeleteSessionAsync` after confirmation.
