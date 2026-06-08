@@ -59,6 +59,12 @@ The main grid displays high-value filesystem fields and cleanup-oriented summari
 - Selects SDK sessions that no longer have a matching `session-state` folder.
 - Deletes selected SDK sessions through `CopilotClient.DeleteSessionAsync` after confirmation.
 
+## About and Licenses
+
+- Displays the main application license and third-party license notices in an About / Licenses tab inside the app.
+- Shows the main `LICENSE` text first, followed by `THIRD_PARTY_NOTICES.md`.
+- Embeds both license files into the app and also keeps them in build and publish output.
+
 ## Cleanup Actions
 
 - Move selected session folders to the configured destination folder.

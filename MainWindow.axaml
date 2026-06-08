@@ -221,6 +221,32 @@
                     </DataGrid>
                 </Grid>
             </TabItem>
+
+            <TabItem Header="About / Licenses">
+                <Grid Margin="0,8,0,0" RowDefinitions="Auto,*">
+                    <Border Grid.Row="0" Background="White" BorderBrush="#DDE3EA" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,8">
+                        <DockPanel LastChildFill="False">
+                            <StackPanel DockPanel.Dock="Left" Orientation="Vertical">
+                                <TextBlock Text="Copilot Cleaner" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock Text="Application license and third-party notices" Foreground="#526173" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <TextBlock x:Name="LicenseSummaryTextBlock" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#526173" />
+                        </DockPanel>
+                    </Border>
+
+                    <TextBox x:Name="LicenseNoticesTextBox"
+                             Grid.Row="1"
+                             AcceptsReturn="True"
+                             IsReadOnly="True"
+                             TextWrapping="NoWrap"
+                             FontFamily="Consolas"
+                             FontSize="11"
+                             BorderBrush="#DDE3EA"
+                             Background="White"
+                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                             ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                </Grid>
+            </TabItem>
         </TabControl>
 
     <Border Grid.Row="1" Margin="0,8,0,0" Background="Transparent">

@@ -40,6 +40,10 @@ jobs:
       - name: Restore
         run: dotnet restore CopilotCleaner.csproj
 
+      - name: License attribution check
+        shell: pwsh
+        run: ./Scripts/Check-Licenses.ps1 -NoRestore
+
       - name: Build
         run: dotnet build CopilotCleaner.csproj --configuration Release --no-restore
 
@@ -52,6 +56,10 @@ jobs:
           --output artifacts/CopilotCleaner-${{ matrix.rid }}
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
+
+      - name: Verify publish license files
+        shell: pwsh
+        run: ./Scripts/Test-PublishLicenses.ps1 -PublishDirectory artifacts/CopilotCleaner-${{ matrix.rid }}
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v7

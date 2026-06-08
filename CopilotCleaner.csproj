@@ -16,4 +16,11 @@
     <PackageReference Include="YamlDotNet" Version="18.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="LICENSE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <Content Include="THIRD_PARTY_NOTICES.md" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="Always" />
+    <EmbeddedResource Include="LICENSE" LogicalName="CopilotCleaner.LICENSE" />
+    <EmbeddedResource Include="THIRD_PARTY_NOTICES.md" LogicalName="CopilotCleaner.THIRD_PARTY_NOTICES.md" />
+  </ItemGroup>
+
 </Project>

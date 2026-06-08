@@ -39,6 +39,7 @@ The main window has three primary areas:
 - A sortable, reorderable session-state grid with row checkboxes and aggregation controls.
 - A selected-session details area with lazy file-list loading and full flattened metadata values.
 - A Copilot SDK Sessions tab with SDK home selection, SDK session loading, SDK metadata columns, missing-session-state selection, and SDK-backed deletion.
+- An About / Licenses tab that displays the embedded `LICENSE` text first, followed by embedded `THIRD_PARTY_NOTICES.md` text.
 
 Session State and Copilot SDK sorting is tracked per column and applied according to the visible left-to-right column order. Aggregation is represented by explicit group rows in the session grid, supports multiple ordered grouping levels, and supports group-level checkbox selection across nested groups.
 
@@ -53,3 +54,5 @@ The UI uses Avalonia controls and storage-provider folder pickers rather than WP
 ## Automation
 
 GitHub Actions includes a Windows, Linux, and macOS build workflow for pushes and pull requests to `main`. Release automation runs from `v*` tags or manual dispatch, publishes self-contained `win-x64`, `win-arm64`, `linux-x64`, `osx-x64`, and `osx-arm64` ZIP files, and creates a GitHub Release. Dependabot tracks NuGet and GitHub Actions updates weekly.
+
+License compliance is checked by `Scripts/Check-Licenses.ps1`, which restores the project when needed, reads `obj/project.assets.json`, validates NuGet license metadata for packages with compile/runtime/native assets against the approved policy, requires the main MIT `LICENSE`, and requires each notice-relevant package/version to appear in `THIRD_PARTY_NOTICES.md`. `LICENSE` and `THIRD_PARTY_NOTICES.md` are embedded into the app for the About / Licenses tab and copied into build and publish output. Build and release workflows also run `Scripts/Test-PublishLicenses.ps1` after publish to verify that both license files are present and that any SDK-published `copilot-cli` runtime retains its `LICENSE.md` file.

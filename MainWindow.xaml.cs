@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
+using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
@@ -24,6 +25,10 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, ListSortDirection> activeSorts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ListSortDirection> activeCopilotSdkSorts = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, string> copilotSdkColumnLabels = new(StringComparer.OrdinalIgnoreCase);
+    private const string MainLicenseResourceName = "CopilotCleaner.LICENSE";
+    private const string MainLicenseFileName = "LICENSE";
+    private const string LicenseNoticesResourceName = "CopilotCleaner.THIRD_PARTY_NOTICES.md";
+    private const string LicenseNoticesFileName = "THIRD_PARTY_NOTICES.md";
     private readonly ObservableCollection<SessionRow> sessions = [];
     private readonly ObservableCollection<SessionGridEntry> sessionView = [];
     private readonly List<CopilotSdkSessionRow> copilotSdkSessionRows = [];
@@ -52,6 +57,7 @@ public partial class MainWindow : Window
 
         RebuildColumns();
         ConfigureCopilotSdkSorting();
+        LoadLicenseNotices();
         _ = ScanAsync();
         _ = LoadCopilotSdkSessionsAsync();
     }
@@ -82,7 +88,59 @@ public partial class MainWindow : Window
         FileListSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(FileListSummaryTextBlock));
         MetadataSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(MetadataSummaryTextBlock));
         CopilotSdkSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(CopilotSdkSummaryTextBlock));
+        LicenseSummaryTextBlock = GetRequiredControl<TextBlock>(nameof(LicenseSummaryTextBlock));
+        LicenseNoticesTextBox = GetRequiredControl<TextBox>(nameof(LicenseNoticesTextBox));
         StatusTextBlock = GetRequiredControl<TextBlock>(nameof(StatusTextBlock));
+    }
+
+    private void LoadLicenseNotices()
+    {
+        var mainLicense = ReadEmbeddedText(MainLicenseResourceName) ?? ReadPublishedText(MainLicenseFileName);
+        var thirdPartyNotices = ReadEmbeddedText(LicenseNoticesResourceName) ?? ReadPublishedText(LicenseNoticesFileName);
+
+        if (string.IsNullOrWhiteSpace(mainLicense) && string.IsNullOrWhiteSpace(thirdPartyNotices))
+        {
+            LicenseNoticesTextBox.Text = "License files were not found in the application resources or next to the executable.";
+            LicenseSummaryTextBlock.Text = "Licenses unavailable";
+            return;
+        }
+
+        var text = string.Join(
+            Environment.NewLine + Environment.NewLine,
+            new[]
+            {
+                FormatLicenseSection("Main License", mainLicense, "The main application license was not found."),
+                FormatLicenseSection("Third-Party Notices", thirdPartyNotices, "Third-party license notices were not found.")
+            });
+
+        LicenseNoticesTextBox.Text = text;
+        LicenseSummaryTextBlock.Text = $"{text.Split('\n').Length:N0} lines";
+    }
+
+    private static string FormatLicenseSection(string title, string? content, string missingMessage)
+    {
+        return string.IsNullOrWhiteSpace(content)
+            ? $"# {title}{Environment.NewLine}{Environment.NewLine}{missingMessage}"
+            : $"# {title}{Environment.NewLine}{Environment.NewLine}{content.Trim()}";
+    }
+
+    private static string? ReadEmbeddedText(string resourceName)
+    {
+        var assembly = Assembly.GetExecutingAssembly();
+        using var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is null)
+        {
+            return null;
+        }
+
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
+    private static string? ReadPublishedText(string fileName)
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, fileName);
+        return File.Exists(path) ? File.ReadAllText(path) : null;
     }
 
     private T GetRequiredControl<T>(string name) where T : Control

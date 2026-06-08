@@ -43,6 +43,20 @@ dotnet restore CopilotCleaner.csproj
 dotnet build CopilotCleaner.csproj --configuration Release
 ```
 
+## License Notices
+
+Copilot Cleaner is licensed under the MIT License in `LICENSE`. Third-party dependency attributions are tracked in `THIRD_PARTY_NOTICES.md`. Both files are copied into build and publish output so release artifacts carry the license information with the app.
+
+The same license files are embedded into the app and displayed on the About / Licenses tab, with the main application license first and third-party notices after it.
+
+Run the license guardrail before merging dependency changes:
+
+```powershell
+./Scripts/Check-Licenses.ps1
+```
+
+The check restores the project when needed, reads the NuGet dependency graph, verifies approved license metadata for packages with compile/runtime/native assets, and fails if `LICENSE` or `THIRD_PARTY_NOTICES.md` is missing or stale. CI also verifies that publish output contains both license files and retains any bundled GitHub Copilot CLI `LICENSE.md` file.
+
 To create a framework-dependent publish output for a target runtime:
 
 ```powershell

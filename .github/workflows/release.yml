@@ -44,6 +44,10 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: License attribution check
+        shell: pwsh
+        run: ./Scripts/Check-Licenses.ps1
+
       - name: Publish app
         run: >-
           dotnet publish CopilotCleaner.csproj
@@ -54,6 +58,10 @@ jobs:
           -p:PublishSingleFile=true
           -p:IncludeNativeLibrariesForSelfExtract=true
           -p:EnableCompressionInSingleFile=true
+
+      - name: Verify publish license files
+        shell: pwsh
+        run: ./Scripts/Test-PublishLicenses.ps1 -PublishDirectory artifacts/CopilotCleaner-${{ matrix.rid }}
 
       - name: Create archive
         shell: pwsh
